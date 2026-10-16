@@ -1,0 +1,26 @@
+name: Desktop checks
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:e2e
+      - run: npm run package
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: reqtype-${{ matrix.os }}
+          path: |
+            release/
+            test-results/

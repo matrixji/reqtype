@@ -1,0 +1,53 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { promises as fs } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import path from 'node:path';
+import os from 'node:os';
+import { commitFiles, gitDiff, gitShow, gitState, initGit } from '../src/main/git';
+
+const exec = promisify(execFile);
+test('本地 Git 闭环保留未选中的既有暂存内容', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'reqtype-git-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const git = async (...args: string[]) => (await exec('git', ['-C', root, ...args])).stdout;
+  assert.equal((await gitState(root)).repository, false);
+  await initGit(root);
+  await git('config', 'user.name', 'ReqType Test'); await git('config', 'user.email', 'test@reqtype.local');
+  await fs.writeFile(path.join(root, '选择 中文.md'), '# first');
+  await fs.writeFile(path.join(root, 'other.md'), '# other');
+  await git('add', 'other.md');
+  const result = await commitFiles(root, ['选择 中文.md'], '初始需求');
+  assert.match(result.hash, /^[a-f0-9]{40}$/);
+  assert.equal(await git('ls-tree', '--name-only', '-z', 'HEAD'), '选择 中文.md\0');
+  assert.equal((await git('diff', '--cached', '--name-only')).trim(), 'other.md');
+  assert.ok(!(await gitState(root)).files.some(file => file.path === '选择 中文.md'));
+  await fs.writeFile(path.join(root, '选择 中文.md'), '# changed');
+  assert.match(await gitDiff(root, '选择 中文.md'), /\+# changed/);
+  await commitFiles(root, ['选择 中文.md'], '更新需求');
+  assert.equal((await git('diff', '--cached', '--name-only')).trim(), 'other.md');
+  const state = await gitState(root);
+  assert.equal(state.history.length, 2);
+  assert.equal(state.history[0].subject, '更新需求');
+  assert.match(await gitShow(root, state.history[0].hash), /更新需求/);
+  assert.equal(state.files[0].path, 'other.md');
+});
+
+test('Git 重命名、删除和失败提交不会改动既有暂存区', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'reqtype-git-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const git = async (...args: string[]) => (await exec('git', ['-C', root, ...args])).stdout;
+  await initGit(root); await git('config', 'user.name', 'ReqType Test'); await git('config', 'user.email', 'test@reqtype.local');
+  await fs.writeFile(path.join(root, 'old.md'), 'content'); await commitFiles(root, ['old.md'], 'initial');
+  await git('mv', 'old.md', 'new name.md');
+  const state = await gitState(root);
+  assert.equal(state.files[0].originalPath, 'old.md');
+  const before = await fs.readFile(path.join(root, '.git/index'));
+  await assert.rejects(commitFiles(root, ['not-in-status.md'], 'invalid'), /状态已变化/);
+  assert.deepEqual(await fs.readFile(path.join(root, '.git/index')), before);
+  await commitFiles(root, ['old.md', 'new name.md'], 'rename');
+  assert.equal((await gitState(root)).files.length, 0);
+  await fs.unlink(path.join(root, 'new name.md')); await commitFiles(root, ['new name.md'], 'delete');
+  assert.equal((await gitState(root)).files.length, 0);
+});
