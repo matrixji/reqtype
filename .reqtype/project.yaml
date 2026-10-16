@@ -1,0 +1,45 @@
+version: 1
+name: "ReqType · 工程需求"
+documents: [ requirements ]
+assets: [ assets ]
+types: [ need, requirement, test ]
+statuses: [ draft, reviewed, approved, retired ]
+priorities: [ low, normal, high, critical ]
+linkTypes: [ satisfies, verifies, depends_on ]
+attributes:
+  owner:
+    type: string
+  milestone:
+    type: enum
+    values: [ v0.1, future ]
+  implementation:
+    type: string
+  verification:
+    type: string
+id: 7dbdb262-9ac5-485c-a245-da443159ceb9
+description: ReqType 自身需求：项目、Git、代码与本地图形。
+requirement:
+  prefix: REQTYPE
+  padding: 3
+  defaultType: requirement
+  defaultPriority: normal
+general:
+  defaultView: document
+  spellcheck: false
+exports:
+  defaultFormat: json
+  fileName: "{project}-{date}"
+  prettyJson: true
+workflow:
+  initial: draft
+  transitions:
+    draft:
+      - reviewed
+    reviewed:
+      - draft
+      - approved
+    approved:
+      - reviewed
+      - retired
+    retired:
+      - draft
