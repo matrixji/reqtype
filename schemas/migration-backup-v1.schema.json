@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reqtype.local/schemas/migration-backup-v1.schema.json",
+  "title": "ReqType immutable migration backup v1",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "reqtype.migration-backup"
+    },
+    "version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "projectId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "project",
+              "module",
+              "renderers",
+              "journal"
+            ]
+          },
+          "from": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "to": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "before": {
+            "type": "string"
+          },
+          "after": {
+            "type": "string"
+          },
+          "beforeHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "afterHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "path",
+          "kind",
+          "from",
+          "to",
+          "before",
+          "after",
+          "beforeHash",
+          "afterHash"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "id",
+    "createdAt",
+    "projectId",
+    "documents",
+    "entries"
+  ],
+  "additionalProperties": true
+}

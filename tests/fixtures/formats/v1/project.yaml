@@ -1,0 +1,5 @@
+version: 1
+name: Frozen project
+documents: [modules]
+assets: [assets]
+x-project: {preserve: true}

@@ -315,3 +315,43 @@ links:
 实际调用随应用附带的 JAR 绘制时序图，验证项目内 include，确认远程 include 未发出请求。使用本地 HTTP 服务检查 Server 编码与 SVG 处理；切换工具设置后重启保留，交换包不包含本机工具路径。
 
 <!-- /req -->
+
+<!-- req
+id: "21366aff-0108-41b4-9b40-d927ed6772a7"
+key: "TEST-017"
+type: test
+status: draft
+priority: high
+attributes:
+  milestone: v0.1
+  implementation: "tests/formats.test.ts"
+links:
+  - type: verifies
+    target: "b78e8872-4978-4fbe-8568-b5541b5186b8"
+-->
+
+### 验证格式契约与未来版本拒写
+
+使用冻结夹具覆盖源文本、BOM、CRLF、未知扩展、身份与关联保留；离线编译 Schema 并校验当前写入器。未来配置、模块、交换包、本机状态、日志和备份均须受到保护，直接文件 IPC 与导入也不能隐式降级。
+
+<!-- /req -->
+
+<!-- req
+id: "94cd87eb-c7f7-4e6e-9778-54a4a13ad3bf"
+key: "TEST-018"
+type: test
+status: draft
+priority: high
+attributes:
+  milestone: v0.1
+  implementation: "tests/migrations.test.ts"
+links:
+  - type: verifies
+    target: "d642cb52-258b-41bc-89dd-60fbe575161c"
+-->
+
+### 验证迁移预览、恢复与回归维护
+
+在临时项目验证预览零写入、备份早于首写、过期或变更计划拒绝、失败回滚、日志恢复、重复执行、损坏备份和后续人工编辑保护、附件与交换往返；在真实 Electron 中回归升级和恢复操作。每次修改相关行为时同步维护对应自动化用例与回归矩阵。
+
+<!-- /req -->

@@ -8,3 +8,4 @@
 *.mjs text eol=lf
 *.cjs text eol=lf
 *.jar binary
+tests/fixtures/formats/** -text whitespace=cr-at-eol

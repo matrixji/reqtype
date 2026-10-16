@@ -1,0 +1,13 @@
+{
+  "format": "reqtype",
+  "version": 1,
+  "exportedAt": "2026-10-17T00:00:00.000Z",
+  "files": [
+    {
+      "path": "modules/frozen.md",
+      "encoding": "utf8",
+      "content": "﻿---\r\nmodule: \"11111111-1111-4111-8111-111111111111\"\r\ntitle: \"迁移夹具 😀\" # title comment\r\nx-module: untouched # keep\r\nreqtype: 1\r\n---\r\n\r\n# 固定的旧格式样例\r\n\r\n<!-- req\r\nid: \"22222222-2222-4222-8222-222222222222\"\r\nkey: 'OLD-007' # keep number\r\ntype: requirement\r\nstatus: draft\r\npriority: high\r\nx-vendor: {keep: 42}\r\nlinks:\r\n  - type: depends_on\r\n    target: \"33333333-3333-4333-8333-333333333333\"\r\n-->\r\n\r\n多段正文，中文与 emoji 😀。\r\n\r\n| 输入 | 输出 |\r\n| --- | --- |\r\n| A | B |\r\n\r\n```markdown\r\n<!-- req\r\nid: this-is-only-an-example\r\n-->\r\n```\r\n\r\n![本地附件](../assets/pixel.png)\r\n\r\n<!-- /req -->\r\n\r\n<!-- req\r\nid: \"33333333-3333-4333-8333-333333333333\"\r\nkey: OLD-008\r\ntype: test\r\nstatus: draft\r\n-->\r\n\r\n验证另一个条目的关联。\r\n\r\n<!-- /req -->\r\n",
+      "sha256": "0f3f2bad880366ea95ce841304643a9969a212738f08efe4d8902fda8905f3e6"
+    }
+  ]
+}

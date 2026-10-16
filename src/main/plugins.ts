@@ -2,7 +2,9 @@ import { utilityProcess, type UtilityProcess } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { atomicWrite, exists, safePath } from './workspace';
+import { atomicWrite, digest, exists, readOptional, safePath } from './workspace';
+import { saveAppState } from './state-storage';
+import { readPluginState, writePluginState } from '../core/app-state';
 import type { PluginInfo, PluginSnapshot, PluginResult } from '../shared/types';
 
 interface Manifest { id: string; name: string; version: string; apiVersion: 1; main: string }
@@ -10,6 +12,10 @@ interface Running { info: PluginInfo; directory: string; process?: UtilityProces
 export class PluginManager {
   entries = new Map<string, Running>();
   disabled = new Set<string>();
+  stateError?: string;
+  stateSource?: string;
+  stateVersion: string | null = null;
+  async saveState() { const bytes = Buffer.from(writePluginState([...this.disabled], this.stateSource)); await saveAppState(path.join(this.directory, 'disabled.json'), 'plugins', bytes.toString('utf8'), this.stateSource); this.stateSource = bytes.toString('utf8'); this.stateVersion = digest(bytes); }
   constructor(public directory: string, public builtin: string, public worker: string) {}
   async manifest(directory: string): Promise<Manifest> {
     const value = JSON.parse(await fs.readFile(await safePath(directory, 'plugin.json'), 'utf8')) as Manifest;
@@ -19,14 +25,15 @@ export class PluginManager {
   }
   async init() {
     await fs.mkdir(this.directory, { recursive: true });
-    try { this.disabled = new Set(JSON.parse(await fs.readFile(path.join(this.directory, 'disabled.json'), 'utf8'))); } catch { /* 首次运行 */ }
+    const bytes = await readOptional(path.join(this.directory, 'disabled.json'));
+    if (bytes) { this.stateSource = bytes.toString('utf8'); this.stateVersion = digest(bytes); try { this.disabled = new Set(readPluginState(this.stateSource).value.disabled); } catch (error) { this.stateError = `插件启用设置无法读取，已停用插件并保留原文件：${(error as Error).message}`; } }
     const directories = [{ directory: this.builtin, builtin: true }];
-    for (const entry of await fs.readdir(this.directory, { withFileTypes: true })) if (entry.isDirectory() && !entry.isSymbolicLink()) directories.push({ directory: path.join(this.directory, entry.name), builtin: false });
+    for (const entry of await fs.readdir(this.directory, { withFileTypes: true })) if (entry.isDirectory() && !entry.isSymbolicLink() && !entry.name.startsWith('.')) directories.push({ directory: path.join(this.directory, entry.name), builtin: false });
     for (const item of directories) {
       try {
         const manifest = await this.manifest(item.directory);
         if (this.entries.has(manifest.id)) continue;
-        const info: PluginInfo = { id: manifest.id, name: manifest.name, version: manifest.version, enabled: !this.disabled.has(manifest.id), builtin: item.builtin, commands: [], validators: [], exporters: [], importers: [], renderers: [] };
+        const info: PluginInfo = { id: manifest.id, name: manifest.name, version: manifest.version, enabled: !this.stateError && !this.disabled.has(manifest.id), error: this.stateError, builtin: item.builtin, commands: [], validators: [], exporters: [], importers: [], renderers: [] };
         const running: Running = { info, directory: item.directory, pending: new Map() };
         this.entries.set(info.id, running);
         if (info.enabled) await this.start(running);
@@ -70,6 +77,9 @@ export class PluginManager {
   }
   list() { return [...this.entries.values()].map(x => x.info); }
   async toggle(id: string, enabled: boolean) {
+    if (this.stateError) throw new Error(this.stateError);
+    const stateBytes = await readOptional(path.join(this.directory, 'disabled.json'));
+    if ((stateBytes ? digest(stateBytes) : null) !== this.stateVersion) throw new Error('插件设置已被外部修改，请重新启动应用后操作');
     const entry = this.entries.get(id);
     if (!entry) throw new Error('插件不存在');
     entry.info.enabled = enabled;
@@ -80,10 +90,13 @@ export class PluginManager {
       for (const pending of entry.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('插件已停用')); }
       entry.pending.clear();
     }
-    await atomicWrite(path.join(this.directory, 'disabled.json'), Buffer.from(JSON.stringify([...this.disabled])));
+    await this.saveState();
     return this.list();
   }
   async install(directory: string) {
+    if (this.stateError) throw new Error(this.stateError);
+    const stateBytes = await readOptional(path.join(this.directory, 'disabled.json'));
+    if ((stateBytes ? digest(stateBytes) : null) !== this.stateVersion) throw new Error('插件设置已被外部修改，请重新启动应用后操作');
     const manifest = await this.manifest(directory);
     if (this.entries.has(manifest.id) || await exists(path.join(this.directory, manifest.id))) throw new Error('相同 ID 的插件已安装，请使用新的插件 ID 或版本目录');
     const destination = path.join(this.directory, manifest.id);
@@ -95,7 +108,7 @@ export class PluginManager {
     const entry: Running = { directory: destination, pending: new Map(), info: { id: manifest.id, name: manifest.name, version: manifest.version, enabled: false, builtin: false, commands: [], validators: [], exporters: [], importers: [], renderers: [] } };
     this.entries.set(manifest.id, entry);
     this.disabled.add(manifest.id);
-    await atomicWrite(path.join(this.directory, 'disabled.json'), Buffer.from(JSON.stringify([...this.disabled])));
+    await this.saveState();
     return this.list();
   }
   async run(id: string, kind: 'commands' | 'validators' | 'exporters' | 'importers' | 'renderers', action: string, snapshot?: PluginSnapshot, input?: { name: string; text: string } | { language: string; code: string; documentPath: string }) {

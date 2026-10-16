@@ -2,11 +2,14 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, net, shell } from 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { Workspace, atomicWrite, decode, exists, safePath } from './workspace';
+import { Workspace, atomicWrite, decode, exists, readOptional, safePath } from './workspace';
 import { applyImport, decodeExchange, exportWorkspace, prepareImport } from './exchange';
 import { commitFiles, gitDiff, gitShow, gitState, initGit } from './git';
+import { applyMigrations, migrationBackups, previewMigrations, restoreMigration } from './migrations';
 import { PluginManager } from './plugins';
 import { renderPlantuml } from './plantuml';
+import { saveAppState } from './state-storage';
+import { readPreferences, writePreferences } from '../core/app-state';
 import { exportFileName } from '../core/config';
 import type { PluginSnapshot } from '../shared/types';
 
@@ -18,13 +21,15 @@ let plugins: PluginManager;
 let dirty = false, closing = false;
 let mutations: Promise<unknown> = Promise.resolve();
 const current = () => { if (!workspace) throw new Error('请先打开工作区'); return workspace; };
+const preferenceNotices = new Set<string>();
+const withNotices = <T extends { notices?: string[] }>(snapshot: T) => ({ ...snapshot, notices: [...snapshot.notices ?? [], ...preferenceNotices] });
 const settings = () => path.join(app.getPath('userData'), 'settings.json');
 async function selectWorkspace(root: string, create = false) {
   const next = create ? await Workspace.create(root) : await Workspace.open(root);
   const snapshot = await next.snapshot();
   workspace = next;
-  await atomicWrite(settings(), Buffer.from(JSON.stringify({ lastWorkspace: workspace.root })));
-  return snapshot;
+  try { const previous = await readOptional(settings()); await saveAppState(settings(), 'preferences', writePreferences(workspace.root, previous?.toString('utf8')), previous?.toString('utf8')); } catch (error) { preferenceNotices.add(`最近项目记录未更新，已保留原文件：${(error as Error).message}`); }
+  return withNotices(snapshot);
 }
 const handle = (name: string, fn: (...args: any[]) => unknown, mutation = false) => ipcMain.handle(`reqtype:${name}`, (event, ...args) => {
   if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('无效的调用来源');
@@ -33,12 +38,12 @@ const handle = (name: string, fn: (...args: any[]) => unknown, mutation = false)
 });
 
 function registerIPC() {
-  handle('initial', () => workspace?.snapshot() ?? null);
+  handle('initial', async () => workspace ? withNotices(await workspace.snapshot()) : null);
   handle('open', async (create: boolean) => {
     const selected = await dialog.showOpenDialog(window, { title: create ? '选择新工作区目录' : '打开需求工作区', buttonLabel: create ? '在此创建' : '打开', properties: ['openDirectory', 'createDirectory'] });
     return selected.canceled ? null : selectWorkspace(selected.filePaths[0], create);
   }, true);
-  handle('refresh', () => current().snapshot());
+  handle('refresh', async () => withNotices(await current().snapshot()));
   handle('save', (relative: string, content: string, version: string | null) => current().save(relative, content, version), true);
   handle('projectSettings', () => current().projectSettings());
   handle('saveProject', (config, version, renderers) => current().saveProject(config, version, renderers), true);
@@ -64,6 +69,10 @@ function registerIPC() {
     return prepareImport(ws, file, incoming);
   });
   handle('applyImport', (token: string, selected: string[]) => applyImport(current(), token, selected), true);
+  handle('previewMigrations', () => previewMigrations(current()));
+  handle('applyMigrations', (token: string) => applyMigrations(current(), token), true);
+  handle('restoreMigration', (id: string) => restoreMigration(current(), id), true);
+  handle('migrationBackups', () => migrationBackups(current()));
   handle('gitState', () => gitState(current().root));
   handle('gitInit', () => initGit(current().root), true);
   handle('gitDiff', (relative: string, original?: string) => gitDiff(current().root, relative, original));
@@ -121,7 +130,7 @@ app.whenReady().then(async () => {
   await plugins.init();
   const requested = process.argv.find(arg => arg.startsWith('--workspace='))?.slice('--workspace='.length);
   let last: string | undefined;
-  try { last = JSON.parse(await fs.readFile(settings(), 'utf8')).lastWorkspace; } catch { /* 首次运行 */ }
+  try { const bytes = await readOptional(settings()); if (bytes) last = readPreferences(bytes.toString('utf8')).value.lastWorkspace; } catch (error) { preferenceNotices.add(`最近项目记录无法读取，已保留原文件：${(error as Error).message}`); }
   const initial = requested ?? last ?? (await exists(path.join(app.getAppPath(), '.reqtype/project.yaml')) ? app.getAppPath() : undefined);
   let initialError: string | undefined;
   if (initial) try { await selectWorkspace(initial); } catch (cause) { initialError = (cause as Error).message; }

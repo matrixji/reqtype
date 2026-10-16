@@ -10,7 +10,7 @@ export interface Requirement {
 }
 export interface Diagnostic { path: string; from: number; severity: 'error' | 'warning'; message: string; id?: string }
 export interface Heading { depth: number; text: string; from: number }
-export interface ParsedDocument { path: string; moduleId?: string; title: string; requirements: Requirement[]; diagnostics: Diagnostic[]; headings: Heading[]; frontmatter?: { from: number; to: number; yamlFrom: number; yamlTo: number }; blocks: { from: number; to: number; type: string }[] }
+export interface ParsedDocument { readOnly: boolean; path: string; moduleId?: string; title: string; requirements: Requirement[]; diagnostics: Diagnostic[]; headings: Heading[]; frontmatter?: { from: number; to: number; yamlFrom: number; yamlTo: number }; blocks: { from: number; to: number; type: string }[] }
 export interface FileSnapshot { path: string; content: string; version: string }
 export interface ProjectConfig {
   version: 1; id?: string; name: string; description?: string; documents: string[]; assets: string[];
@@ -25,6 +25,9 @@ export interface PlantUMLSettings { mode: 'jar' | 'server'; jarPath: string; jav
 export interface RendererSettings { settings: PlantUMLSettings; version: string | null }
 export interface ProjectSettings { config: ProjectConfig; source: string; version: string | null; renderers: RendererSettings }
 export interface WorkspaceSnapshot { root: string; config: ProjectConfig; configured: boolean; files: FileSnapshot[]; warnings: string[]; notices?: string[] }
+export interface MigrationEntry { path: string; kind: string; from?: number; to?: number; status: 'current' | 'pending' | 'blocked' | 'unmanaged'; steps?: string[]; message?: string; before?: string; after?: string; truncated?: boolean }
+export interface MigrationPreview { token: string; entries: MigrationEntry[]; currentVersions: Record<string, number> }
+export interface MigrationBackupInfo { id: string; createdAt?: string; paths: string[]; error?: string }
 export interface GitFile { path: string; code: string; originalPath?: string }
 export interface GitCommit { hash: string; short: string; subject: string; author: string; date: string }
 export interface GitState { available: boolean; repository: boolean; branch: string; files: GitFile[]; history: GitCommit[]; error?: string }
@@ -45,6 +48,10 @@ export interface DesktopAPI {
   export(kind: 'json' | 'markdown', path?: string): Promise<string | null>;
   prepareImport(): Promise<ImportPreview | null>;
   applyImport(token: string, paths: string[]): Promise<WorkspaceSnapshot>;
+  previewMigrations(): Promise<MigrationPreview>;
+  applyMigrations(token: string): Promise<{ snapshot: WorkspaceSnapshot; backupId: string | null }>;
+  restoreMigration(id: string): Promise<WorkspaceSnapshot>;
+  migrationBackups(): Promise<MigrationBackupInfo[]>;
   gitState(): Promise<GitState>;
   gitInit(): Promise<GitState>;
   gitDiff(path: string, originalPath?: string): Promise<string>;

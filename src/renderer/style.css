@@ -364,3 +364,20 @@ html[data-platform=windows] .titlebar { padding-left: 20px; }
 .decision-card > div { color: #7b9270; white-space: pre-wrap; }
 .tool-path .button { margin-top: 0; margin-bottom: 15px; }
 .plugin-preview { padding: 0; }
+.data-formats { max-width: 980px; margin: 20px auto; }
+.data-formats > p, .migration-backups p { font-size: 11px; color: #829477; line-height: 1.8; }
+.format-results { margin-top: 20px; }
+.format-result { border-top: 1px solid #e8eedf; padding: 13px 0; }
+.format-result > div { display: flex; gap: 14px; align-items: baseline; justify-content: space-between; }
+.format-result code { font-size: 11px; color: #648256; overflow-wrap: anywhere; }
+.format-result > div > span { font-size: 10px; white-space: nowrap; color: #8ca278; }
+.format-result.blocked > div > span { color: #b17a60; }
+.format-result.pending > div > span { color: #a69457; }
+.format-result summary { cursor: pointer; color: #7c986b; font-size: 11px; margin: 10px 0; }
+.format-diff { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 15px; }
+.format-diff strong { font-size: 10px; color: #97aa88; }
+.format-diff pre { font: 10px/1.8 monospace; max-height: 260px; overflow: auto; background: #f6f8f2; padding: 10px; color: #6e8263; }
+.migration-backups h3 { font-size: 13px; color: #7d9b6b; margin-top: 25px; }
+.migration-backups article { display: flex; gap: 8px; flex-direction: column; border-top: 1px solid #edf1e8; padding: 13px 0; }
+.migration-backups code { font-size: 10px; color: #8fa37e; }
+.migration-backups button { align-self: flex-start; }

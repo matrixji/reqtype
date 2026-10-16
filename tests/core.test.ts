@@ -184,7 +184,7 @@ test('工作区 JSON 往返保留原文、未知字段和二进制附件', async
 test('交换拒绝路径穿越、内容校验失败及过期预览', async t => {
   const entry = { path: '../escape.md', encoding: 'utf8', content: 'x', sha256: digest('x') };
   assert.throws(() => decodeExchange({ format: 'reqtype', version: 1, files: [entry] }), /不允许/);
-  assert.throws(() => decodeExchange({ format: 'reqtype', version: 1, files: [{ ...entry, path: 'modules/a.md', sha256: 'wrong' }] }), /校验失败/);
+  assert.throws(() => decodeExchange({ format: 'reqtype', version: 1, files: [{ ...entry, path: 'modules/a.md', sha256: '0'.repeat(64) }] }), /校验失败/);
   const root = await directory(t), ws = await Workspace.create(root), bytes = Buffer.from('# 导入');
   const preview = await prepareImport(ws, 'a.md', [{ path: 'modules/a.md', bytes }]);
   await atomicWrite(path.join(root, 'modules/a.md'), Buffer.from('外部新建'), null);

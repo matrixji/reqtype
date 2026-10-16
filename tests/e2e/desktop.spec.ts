@@ -14,7 +14,9 @@ async function launch(remember = false) {
   const env: Record<string, string> = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
   env.REQTYPE_USER_DATA = userData;
   delete env.ELECTRON_RUN_AS_NODE;
-  app = await _electron.launch({ args: ['.', ...remember ? [] : ['--workspace=' + root]], env });
+  const executablePath = process.env.REQTYPE_E2E_EXECUTABLE;
+  app = await _electron.launch({ executablePath, args: [...executablePath ? [] : ['.'], ...remember ? [] : ['--workspace=' + root]], env });
+  if (executablePath) expect(await app.evaluate(({app})=>({packaged:app.isPackaged,version:app.getVersion()}))).toEqual({packaged:true,version:JSON.parse(await fs.readFile('package.json','utf8')).version});
   page = await app.firstWindow();
   page.on('pageerror', error => pageErrors.push(error.message));
   await expect(page.locator('.workspace-heading h2')).toBeVisible();
@@ -298,4 +300,55 @@ test('离线 Markdown：代码、架构图、公式、任务、脚注、提示�
   await expect(page.getByRole('navigation',{name:'文档目录'})).toBeVisible();
   await page.getByRole('navigation',{name:'文档目录'}).getByRole('button',{name:'架构图',exact:true}).click();
   await expect(page.locator('.cm-line').filter({hasText:/架构图/})).toBeInViewport();
+});
+
+test('格式迁移预览、原文备份恢复与未来模块只读', async () => {
+  const legacy=await fs.readFile('tests/fixtures/formats/legacy/module.md');
+  const renderers=await fs.readFile('tests/fixtures/formats/legacy/renderers.json');
+  await fs.writeFile(path.join(root,'modules/legacy.md'),legacy);
+  await fs.mkdir(path.join(root,'.reqtype/local'),{recursive:true});await fs.writeFile(path.join(root,'.reqtype/local/renderers.json'),renderers);
+  await page.getByRole('button',{name:'项目设置',exact:true}).click();
+  await page.getByRole('button',{name:'重新载入设置',exact:true}).click();
+  await page.getByRole('button',{name:'检查数据格式',exact:true}).click();
+  await expect(page.getByRole('button',{name:'升级所列 2 个文件',exact:true})).toBeEnabled();
+  expect(await fs.readFile(path.join(root,'modules/legacy.md'))).toEqual(legacy);
+  await page.locator('.format-result').filter({hasText:'modules/legacy.md'}).getByText('查看迁移前后原文').click();
+  await expect(page.locator('.format-diff').first()).toContainText('reqtype: 1');
+  await page.getByRole('button',{name:'升级所列 2 个文件',exact:true}).click();
+  await expect(page.getByRole('status')).toContainText('格式升级完成');
+  expect(await fs.readFile(path.join(root,'modules/legacy.md'))).toEqual(await fs.readFile('tests/fixtures/formats/v1/module.md'));
+  await page.getByRole('button',{name:'恢复此备份',exact:true}).click();
+  await expect(page.getByRole('status')).toContainText('已恢复迁移前文件');
+  expect(await fs.readFile(path.join(root,'modules/legacy.md'))).toEqual(legacy);
+  expect(await fs.readFile(path.join(root,'.reqtype/local/renderers.json'))).toEqual(renderers);
+  const future=await fs.readFile('tests/fixtures/formats/future/module.md');await fs.writeFile(path.join(root,'modules/future.md'),future);
+  await page.getByRole('button',{name:'更多操作',exact:true}).click();await page.getByRole('button',{name:'刷新工作区',exact:true}).click();
+  await page.locator('.file-list button[title="modules/future.md"]').click();
+  await expect(page.getByRole('alert')).toContainText('只读');
+  await expect(page.getByRole('button',{name:'源码',exact:true})).toHaveClass('active');
+  await expect(page.getByRole('button',{name:'实时预览',exact:true})).toBeDisabled();
+  await expect(page.locator('.cm-content')).toHaveAttribute('contenteditable','false');
+  await expect(page.getByRole('button',{name:'新建条目',exact:true})).toBeDisabled();
+  const blocked=await page.evaluate(async()=>{const snapshot=await window.reqtype.refresh(),file=snapshot.files.find(file=>file.path==='modules/future.md')!;try{await window.reqtype.save(file.path,file.content.replace('reqtype: 2','reqtype: 1'),file.version);return false;}catch(error){return (error as Error).message.includes('格式版本 2');}});
+  expect(blocked).toBe(true);expect(await fs.readFile(path.join(root,'modules/future.md'))).toEqual(future);
+});
+
+test('未来本机偏好和插件状态保留原文，插件不会意外自动启用',async()=>{
+  await closeApp();
+  const preferences=JSON.stringify({format:'reqtype.preferences',version:2,payload:{lastWorkspace:'/future'}});
+  const pluginState=JSON.stringify({format:'reqtype.plugin-state',version:2,payload:{disabled:[]}});
+  await fs.writeFile(path.join(userData,'settings.json'),preferences);
+  const directory=path.join(userData,'plugins/test.future-state'),marker=path.join(userData,'plugin-executed');await fs.mkdir(directory,{recursive:true});
+  await fs.writeFile(path.join(userData,'plugins/disabled.json'),pluginState);
+  await fs.writeFile(path.join(directory,'plugin.json'),JSON.stringify({id:'test.future-state',name:'未来状态测试插件',version:'1.0.0',apiVersion:1,main:'index.cjs'}));
+  await fs.writeFile(path.join(directory,'index.cjs'),`exports.activate=()=>require('node:fs').writeFileSync(${JSON.stringify(marker)},'executed');`);
+  await launch();
+  expect(await fs.readFile(path.join(userData,'settings.json'),'utf8')).toBe(preferences);
+  expect((await page.evaluate(()=>window.reqtype.plugins())).every(plugin=>!plugin.enabled)).toBe(true);
+  await expect.poll(()=>fs.access(marker).then(()=>true).catch(()=>false)).toBe(false);
+  await page.getByRole('button',{name:'插件',exact:true}).click();
+  await page.getByRole('button',{name:'启用 未来状态测试插件',exact:true}).click();
+  await expect(page.getByRole('status')).toContainText('已停用插件并保留原文件');
+  expect(await fs.readFile(path.join(userData,'plugins/disabled.json'),'utf8')).toBe(pluginState);
+  expect(await fs.access(marker).then(()=>true).catch(()=>false)).toBe(false);
 });

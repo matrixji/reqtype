@@ -412,3 +412,43 @@ links:
 软件应支持 PlantUML 本地 JAR 和可配置 Server，默认使用随应用附带的 JAR，允许选择 Java、JAR 与可选 Graphviz 路径。JAR 支持项目内本地 include，禁止远程引用；只在明确选择 Server 后调用该服务，不在本地失败后自动联网。工具设置保存在本机。
 
 <!-- /req -->
+
+<!-- req
+id: "b78e8872-4978-4fbe-8568-b5541b5186b8"
+key: "SYS-021"
+type: requirement
+status: draft
+priority: high
+attributes:
+  milestone: v0.1
+  implementation: "src/core/formats.ts"
+links:
+  - type: satisfies
+    target: "1b1d26de-7c32-4770-8c6b-6acd2a31e6c7"
+-->
+
+### 独立格式版本与兼容保护
+
+项目、Markdown 模块、交换包、本机设置、恢复日志与迁移备份应分别声明格式版本。应用版本、插件 API 和文件哈希独立管理；已知旧布局兼容读取，未知未来格式拒写，未来模块按源码只读显示，不按 v1 语义建立索引。
+
+<!-- /req -->
+
+<!-- req
+id: "d642cb52-258b-41bc-89dd-60fbe575161c"
+key: "SYS-022"
+type: requirement
+status: draft
+priority: high
+attributes:
+  milestone: v0.1
+  implementation: "src/main/migrations.ts"
+links:
+  - type: satisfies
+    target: "1b1d26de-7c32-4770-8c6b-6acd2a31e6c7"
+-->
+
+### 显式可恢复的数据迁移
+
+软件应支持逐版本前向迁移、只读检查和原文预览。执行计划绑定项目、清单与文件哈希，十分钟过期；存在未保存内容、未知或损坏格式时禁止界面迁移。首写前保存完整原文及校验值，再使用可恢复文件事务；恢复不得覆盖后续编辑，重复执行无额外修改。不得重新分配 UUID、编号或关联。
+
+<!-- /req -->

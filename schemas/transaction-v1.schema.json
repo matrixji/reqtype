@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reqtype.local/schemas/transaction-v1.schema.json",
+  "title": "ReqType file transaction v1",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "reqtype.transaction"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "enum": [
+            "pending",
+            "done",
+            "rolled-back",
+            "needs-attention"
+          ]
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "before": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "after": {
+                "type": "string"
+              },
+              "expected": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "written": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "path",
+              "before",
+              "after",
+              "expected",
+              "written"
+            ],
+            "additionalProperties": true
+          },
+          "maxItems": 10000
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "state",
+        "entries"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "payload"
+  ],
+  "additionalProperties": true
+}

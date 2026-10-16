@@ -1,0 +1,14 @@
+import { useState } from 'react';
+import { FORMATS } from '../core/formats';
+import type { MigrationBackupInfo, MigrationPreview, WorkspaceSnapshot } from '../shared/types';
+interface Props { busy: boolean; unsaved: boolean; run(task: () => Promise<void>): void; onApplied(snapshot: WorkspaceSnapshot): Promise<void>; onMessage(message: string): void }
+export function DataFormatsPanel({ busy, unsaved, run, onApplied, onMessage }: Props) {
+  const [preview, setPreview] = useState<MigrationPreview | null>(null), [backups, setBackups] = useState<MigrationBackupInfo[]>([]);
+  const check = async () => { setPreview(await window.reqtype.previewMigrations()); setBackups(await window.reqtype.migrationBackups()); };
+  const pending = preview?.entries.filter(entry => entry.status === 'pending') ?? [];
+  const blocked = preview?.entries.some(entry => entry.status === 'blocked');
+  return <section className="settings-card data-formats"><h2>数据格式与迁移</h2><p>应用版本与数据格式分别管理。当前项目、Markdown 和交换包格式均为 v1。检查不会改写文件；升级前会保存完整原文备份。</p><div className="row-actions"><button className="button" disabled={busy} onClick={() => run(check)}>检查数据格式</button><button className="button button-primary" disabled={busy || unsaved || !pending.length || blocked} onClick={() => run(async () => { const result = await window.reqtype.applyMigrations(preview!.token); await onApplied(result.snapshot); await check(); onMessage(result.backupId ? `格式升级完成，原始备份：${result.backupId}` : '数据格式已是当前版本'); })}>升级所列 {pending.length} 个文件</button></div>{unsaved && <p className="muted-small">先保存文档与项目设置，再检查和升级格式。</p>}
+    {preview && <div className="format-results" aria-label="格式检查结果">{preview.entries.map(entry => <article className={`format-result ${entry.status}`} key={entry.path}><div><code>{entry.path}</code><span>{({current:'当前格式',pending:'可升级',blocked:'已阻止',unmanaged:'普通文档'})[entry.status]}{entry.from !== undefined ? ` · v${entry.from}${entry.from !== entry.to ? ` → v${entry.to}` : ''}` : ''}</span></div><small>{FORMATS[entry.kind as keyof typeof FORMATS]?.name}{entry.message ? `：${entry.message}` : ''}</small>{entry.status === 'pending' && <details><summary>查看迁移前后原文</summary>{entry.truncated && <p>此预览只显示前 16000 字符；备份保留完整文件。</p>}<div className="format-diff"><div><strong>迁移前</strong><pre>{entry.before}</pre></div><div><strong>迁移后</strong><pre>{entry.after}</pre></div></div></details>}</article>)}</div>}
+    {backups.length > 0 && <div className="migration-backups"><h3>迁移原文备份</h3><p>恢复会检查文件是否仍为迁移后的版本，保护之后的编辑；备份本身会保留。</p>{backups.map(backup => <article key={backup.id}><code>{backup.id}</code><small>{backup.error ?? backup.paths.join('、')}</small><button className="button button-small" disabled={busy || unsaved || Boolean(backup.error)} onClick={() => run(async () => { await onApplied(await window.reqtype.restoreMigration(backup.id)); await check(); onMessage('已恢复迁移前文件；原始备份仍保留'); })}>恢复此备份</button></article>)}</div>}
+  </section>;
+}

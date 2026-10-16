@@ -1,0 +1,5 @@
+version: 2
+name: Future project
+documents: [modules]
+assets: [assets]
+x-new-semantics: true

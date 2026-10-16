@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reqtype.local/schemas/preferences-v1.schema.json",
+  "title": "ReqType application preferences v1",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "reqtype.preferences"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "lastWorkspace": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "payload"
+  ],
+  "additionalProperties": true
+}

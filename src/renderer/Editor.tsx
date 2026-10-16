@@ -12,7 +12,7 @@ import { codeElement, markdownElement } from './markdown-view';
 import type { Requirement } from '../shared/types';
 
 export interface EditorHandle { selection(): { from: number; to: number }; jump(from: number): void; undo(): void; redo(): void }
-interface Props { source: string; baseSource: string; path: string; sessionKey: string; epoch: number; sourceMode: boolean; spellcheck: boolean; onChange(source: string): void; onSelection(from: number, to: number): void }
+interface Props { source: string; baseSource: string; path: string; sessionKey: string; epoch: number; sourceMode: boolean; readOnly?: boolean; spellcheck: boolean; onChange(source: string): void; onSelection(from: number, to: number): void }
 const normalize = (source: string) => source.replace(/\r\n/g, '\n');
 function rawOffset(raw: string, normalized: number) { let index = 0, count = 0; while (index < raw.length && count < normalized) { if (raw[index] === '\r' && raw[index + 1] === '\n') index++; index++; count++; } return index; }
 function normalizedOffset(raw: string, offset: number) { return normalize(raw.slice(0, offset)).length; }
@@ -126,7 +126,7 @@ function livePreview(path: string): Extension {
 
 export const Editor = forwardRef<EditorHandle, Props>(function Editor(props, ref) {
   const host = useRef<HTMLDivElement>(null), view = useRef<EditorView | null>(null), latest = useRef(props), raw = useRef(props.source), applying = useRef(false);
-  const mode = useRef(new Compartment()), spelling = useRef(new Compartment());
+  const mode = useRef(new Compartment()), spelling = useRef(new Compartment()), editing = useRef(new Compartment());
   latest.current = props;
   const modeExtension = (sourceMode: boolean) => sourceMode ? [lineNumbers(), EditorView.editorAttributes.of({ class: 'source-editor' })] : [livePreview(latest.current.path), EditorView.editorAttributes.of({ class: 'live-editor' })];
   useImperativeHandle(ref, () => ({ selection: () => { const sel = view.current?.state.selection.main; return { from: rawOffset(raw.current, sel?.from ?? 0), to: rawOffset(raw.current, sel?.to ?? 0) }; }, jump(from) { const pos = normalizedOffset(raw.current, from); view.current?.dispatch({ selection: EditorSelection.cursor(Math.min(pos, view.current.state.doc.length)), effects: EditorView.scrollIntoView(pos, { y: 'center' }) }); view.current?.focus(); }, undo() { if (view.current) undo(view.current); }, redo() { if (view.current) redo(view.current); } }));
@@ -138,7 +138,7 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(props, ref
     const extensions: Extension[] = [
       markdown({ base: markdownLanguage, codeLanguages: languages }), history(), bracketMatching(), syntaxHighlighting(defaultHighlightStyle), highlightSelectionMatches(), EditorView.lineWrapping,
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]), placeholder('开始书写需求，或选中内容后转换为需求条目…'),
-      mode.current.of(modeExtension(props.sourceMode)), spelling.current.of(EditorView.contentAttributes.of({ spellcheck: String(props.spellcheck) })),
+      mode.current.of(modeExtension(props.sourceMode)), spelling.current.of(EditorView.contentAttributes.of({ spellcheck: String(props.spellcheck) })), editing.current.of([EditorState.readOnly.of(Boolean(props.readOnly)), EditorView.editable.of(!props.readOnly)]),
       EditorView.updateListener.of(update => {
         if (applying.current) return;
         if (update.docChanged) {
@@ -175,5 +175,6 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(props, ref
   }, [props.source]);
   useEffect(() => { view.current?.dispatch({ effects: mode.current.reconfigure(modeExtension(props.sourceMode)) }); }, [props.sourceMode]);
   useEffect(() => { view.current?.dispatch({ effects: spelling.current.reconfigure(EditorView.contentAttributes.of({ spellcheck: String(props.spellcheck) })) }); }, [props.spellcheck]);
+  useEffect(() => { view.current?.dispatch({ effects: editing.current.reconfigure([EditorState.readOnly.of(Boolean(props.readOnly)), EditorView.editable.of(!props.readOnly)]) }); }, [props.readOnly]);
   return <div className="editor-host" ref={host} data-testid="markdown-editor" />;
 });

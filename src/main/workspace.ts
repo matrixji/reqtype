@@ -2,9 +2,10 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { stringify } from 'yaml';
-import { defaultPlantuml, validatePlantuml } from '../core/rendering';
+import { defaultPlantuml, readRendererDocument, writeRendererDocument } from '../core/rendering';
 import { defaultConfig, parseConfig, patchProjectConfig, validateRelativePath } from '../core/config';
-import { ensureModule, indexWorkspace, makeRequirement } from '../core/markdown';
+import { assertModuleWritable, ensureModule, indexWorkspace, makeRequirement } from '../core/markdown';
+import { envelope, isRecord, readEnvelope } from '../core/formats';
 import type { FileSnapshot, ProjectConfig, ProjectSettings, RendererSettings, WorkspaceSnapshot } from '../shared/types';
 
 export const digest = (bytes: string | Uint8Array) => createHash('sha256').update(bytes).digest('hex');
@@ -44,7 +45,23 @@ export async function atomicWrite(file: string, bytes: Uint8Array, expected?: st
 }
 
 export interface TransactionEntry { path: string; before: string | null; after: string; expected: string | null; written: string }
-interface Journal { state: 'pending' | 'done' | 'rolled-back' | 'needs-attention'; entries: TransactionEntry[]; errors?: string[] }
+export interface Journal { state: 'pending' | 'done' | 'rolled-back' | 'needs-attention'; entries: TransactionEntry[]; errors?: string[] }
+
+export function readJournalDocument(source: string) {
+  return readEnvelope('journal', JSON.parse(source), value => {
+    if (!isRecord(value) || !['pending', 'done', 'rolled-back', 'needs-attention'].includes(value.state) || !Array.isArray(value.entries) || value.entries.length > 10000 || value.errors !== undefined && (!Array.isArray(value.errors) || value.errors.some((error: unknown) => typeof error !== 'string'))) throw new Error('无效的恢复日志');
+    const paths = new Set<string>();
+    for (const entry of value.entries) {
+      if (!isRecord(entry)) throw new Error('恢复日志条目无效');
+      validateRelativePath(entry.path);
+      if (paths.has(entry.path.toLowerCase())) throw new Error('恢复日志路径重复'); paths.add(entry.path.toLowerCase());
+      for (const field of ['after', 'before'] as const) if (!(field === 'before' && entry[field] === null) && (typeof entry[field] !== 'string' || Buffer.from(entry[field], 'base64').toString('base64') !== entry[field])) throw new Error('恢复日志内容不是规范 Base64');
+      if (entry.expected !== (entry.before === null ? null : digest(Buffer.from(entry.before, 'base64'))) || entry.written !== digest(Buffer.from(entry.after, 'base64'))) throw new Error('恢复日志哈希与内容不匹配');
+    }
+    return value as Journal;
+  });
+}
+export const writeJournalDocument = (journal: Journal, previous: Record<string, any> = {}) => JSON.stringify(envelope('journal', journal, previous));
 
 async function rollback(root: string, journal: Journal) {
   const errors: string[] = [];
@@ -71,11 +88,15 @@ export async function recoverTransactions(root: string) {
     if (!name.endsWith('.json')) continue;
     const file = await safePath(root, `.reqtype/local/transactions/${name}`);
     try {
-      const journal = JSON.parse(await fs.readFile(file, 'utf8')) as Journal;
-      if (!Array.isArray(journal.entries)) throw new Error('无效的恢复日志');
+      const source = await fs.readFile(file, 'utf8'), document = readJournalDocument(source), journal = document.value;
       if (journal.state === 'pending') {
+        if (document.legacy) {
+          const backup = await safePath(root, `.reqtype/local/legacy-journals/${digest(source)}.json`), previous = await readOptional(backup);
+          if (previous && digest(previous) !== digest(source)) throw new Error('旧恢复日志原文备份校验失败，未执行回滚');
+          if (!previous) await atomicWrite(backup, Buffer.from(source), null);
+        }
         const errors = await rollback(root, journal);
-        await atomicWrite(file, Buffer.from(JSON.stringify(journal)));
+        await atomicWrite(file, Buffer.from(writeJournalDocument(journal, document.envelope)), digest(source));
         warnings.push(errors.length ? `导入恢复需要检查 ${file}：${errors.join('；')}` : '已恢复上次中断的导入，原文件已还原');
       } else if (journal.state === 'needs-attention') warnings.push(`导入恢复有未解决问题：${file}`);
     } catch (cause) { warnings.push(`恢复日志 ${name}：${(cause as Error).message}`); }
@@ -94,17 +115,17 @@ export async function applyTransaction(root: string, updates: { path: string; by
     journal.entries.push({ path: update.path, before: current?.toString('base64') ?? null, after: update.bytes.toString('base64'), expected: update.expected, written: digest(update.bytes) });
   }
   const journalFile = await safePath(root, `.reqtype/local/transactions/${Date.now()}-${randomUUID()}.json`);
-  await atomicWrite(journalFile, Buffer.from(JSON.stringify(journal)));
+  await atomicWrite(journalFile, Buffer.from(writeJournalDocument(journal)));
   try {
     for (const [index, update] of updates.entries()) {
       await atomicWrite(await safePath(root, update.path), update.bytes, update.expected);
       await afterWrite?.(index);
     }
     journal.state = 'done';
-    await atomicWrite(journalFile, Buffer.from(JSON.stringify(journal)));
+    await atomicWrite(journalFile, Buffer.from(writeJournalDocument(journal)));
   } catch (cause) {
     const errors = await rollback(root, journal);
-    await atomicWrite(journalFile, Buffer.from(JSON.stringify(journal)));
+    await atomicWrite(journalFile, Buffer.from(writeJournalDocument(journal)));
     throw new Error(`导入失败：${(cause as Error).message}。${errors.length ? `恢复需检查 ${journalFile}` : '已恢复导入前的文件'}`);
   }
 }
@@ -113,11 +134,11 @@ export class Workspace {
   root: string;
   recoveryWarnings: string[] = [];
   constructor(root: string) { this.root = root; }
-  static async open(root: string) {
+  static async open(root: string, options: { recover?: boolean } = {}) {
     const real = await fs.realpath(root);
     if (!(await fs.stat(real)).isDirectory()) throw new Error('请选择一个目录');
     const workspace = new Workspace(real);
-    workspace.recoveryWarnings = await recoverTransactions(real);
+    workspace.recoveryWarnings = options.recover === false ? [] : await recoverTransactions(real);
     return workspace;
   }
   static async create(root: string) {
@@ -145,7 +166,7 @@ export class Workspace {
   async projectSettings(): Promise<ProjectSettings> {
     const bytes = await readOptional(await safePath(this.root, '.reqtype/project.yaml'));
     const rendererBytes = await readOptional(await safePath(this.root, '.reqtype/local/renderers.json'));
-    const renderers = { settings: rendererBytes ? validatePlantuml(JSON.parse(decode(rendererBytes))) : defaultPlantuml(), version: rendererBytes ? digest(rendererBytes) : null };
+    const renderers = { settings: rendererBytes ? readRendererDocument(decode(rendererBytes)).value : defaultPlantuml(), version: rendererBytes ? digest(rendererBytes) : null };
     return { config: bytes ? parseConfig(decode(bytes)) : defaultConfig(path.basename(this.root)), source: bytes ? decode(bytes) : '', version: bytes ? digest(bytes) : null, renderers };
   }
   async saveProject(input: ProjectConfig, expected: string | null, renderers?: RendererSettings): Promise<WorkspaceSnapshot> {
@@ -161,7 +182,7 @@ export class Workspace {
     const source = patchProjectConfig(previous.source, config);
     parseConfig(source);
     const updates = [{ path: '.reqtype/project.yaml', bytes: Buffer.from(source), expected }];
-    if (renderers) { const settings = validatePlantuml(renderers.settings); if (previous.renderers.version !== renderers.version) throw new Error('本机渲染设置已被外部修改，请重新载入'); updates.push({ path: '.reqtype/local/renderers.json', bytes: Buffer.from(JSON.stringify(settings, null, 2) + '\n'), expected: renderers.version }); }
+    if (renderers) { const settings = renderers.settings; if (previous.renderers.version !== renderers.version) throw new Error('本机渲染设置已被外部修改，请重新载入'); updates.push({ path: '.reqtype/local/renderers.json', bytes: Buffer.from(writeRendererDocument(settings, await readOptional(await safePath(this.root, '.reqtype/local/renderers.json')).then(bytes => bytes ? decode(bytes) : undefined))), expected: renderers.version }); }
     await applyTransaction(this.root, updates.filter(update => digest(update.bytes) !== update.expected));
     return this.snapshot();
   }
@@ -206,7 +227,10 @@ export class Workspace {
     if (configured && !config.documents.some(root => relative === root || relative.startsWith(root + '/'))) throw new Error('文件路径不在项目配置的文档目录中');
     if (expected === null && (await this.paths(config.documents, true)).some(existing => existing !== relative && existing.toLowerCase() === relative.toLowerCase())) throw new Error('文件路径与已有文档存在大小写冲突');
     if (Buffer.byteLength(content) > 8 * 1024 * 1024) throw new Error('文档超过 8 MB，请拆分模块');
-    await atomicWrite(await safePath(this.root, relative), Buffer.from(content), expected);
+    const target = await safePath(this.root, relative), old = await readOptional(target);
+    if (old) assertModuleWritable(decode(old));
+    assertModuleWritable(content);
+    await atomicWrite(target, Buffer.from(content), expected);
     return { path: relative, content, version: digest(content) };
   }
 }

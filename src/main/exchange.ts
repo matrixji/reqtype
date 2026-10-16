@@ -1,8 +1,9 @@
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { assertFormatVersion, FORMATS, isRecord } from '../core/formats';
 import { parseConfig, validateRelativePath } from '../core/config';
-import { indexWorkspace, markdownTree } from '../core/markdown';
+import { assertModuleWritable, indexWorkspace, markdownTree } from '../core/markdown';
 import type { ExchangePackage, ImportPreview } from '../shared/types';
 import { Workspace, safePath, digest, decode, readOptional, applyTransaction } from './workspace';
 
@@ -53,15 +54,18 @@ export async function exportWorkspace(workspace: Workspace): Promise<ExchangePac
     const encoding = /\.(md|ya?ml)$/i.test(relative) ? 'utf8' as const : 'base64' as const;
     files.push({ path: relative, encoding, content: encoding === 'utf8' ? decode(bytes) : bytes.toString('base64'), sha256: digest(bytes) });
   }
-  return { format: 'reqtype', version: 1, exportedAt: new Date().toISOString(), files };
+  return { format: 'reqtype', version: FORMATS.exchange.current, exportedAt: new Date().toISOString(), files };
 }
 
 export function decodeExchange(input: unknown) {
   const bundle = input as ExchangePackage;
-  if (!bundle || bundle.format !== 'reqtype' || bundle.version !== 1 || !Array.isArray(bundle.files) || bundle.files.length > 10000) throw new Error('不是受支持的 ReqType v1 交换包');
+  if (!isRecord(bundle) || bundle.format !== FORMATS.exchange.id) throw new Error('不是受支持的 ReqType 交换包');
+  assertFormatVersion('exchange', bundle.version);
+  if (!Array.isArray(bundle.files) || bundle.files.length > 10000) throw new Error('交换包 files 必须是最多 10000 个文件的列表');
   const names = new Set<string>();
   let total = 0;
   return bundle.files.map(entry => {
+    if (!isRecord(entry) || typeof entry.path !== 'string' || typeof entry.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(entry.sha256)) throw new Error('交换包文件条目无效');
     allowedPath(entry.path);
     const folded = entry.path.toLowerCase();
     if (names.has(folded)) throw new Error(`交换包有重复或大小写冲突的路径：${entry.path}`);
@@ -123,6 +127,7 @@ export async function applyImport(workspace: Workspace, token: string, selected:
   for (const entry of entries) if (/\.md$/i.test(entry.path)) candidate.set(entry.path, decode(entry.bytes));
   const errors = indexWorkspace([...candidate].map(([path, content]) => ({ path, content })), config).diagnostics.filter(x => x.severity === 'error');
   if (errors.length) throw new Error(`导入会产生错误：${errors[0].path}：${errors[0].message}`);
+  for (const entry of entries) if (/\.md$/i.test(entry.path)) { const previous = await readOptional(await safePath(workspace.root, entry.path)); if (previous) assertModuleWritable(decode(previous)); assertModuleWritable(decode(entry.bytes)); }
   await applyTransaction(workspace.root, entries.filter(entry => entry.expected !== digest(entry.bytes)));
   plans.delete(token);
   return workspace.snapshot();

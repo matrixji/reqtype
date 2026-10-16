@@ -1,8 +1,9 @@
 import { isMap, parseDocument, stringify, visit } from 'yaml';
+import { assertFormatVersion, FORMATS } from './formats';
 import type { ProjectConfig } from '../shared/types';
 
 export const defaultConfig = (name = '我的需求项目'): ProjectConfig => ({
-  version: 1, name, description: '', documents: ['modules'], assets: ['assets'],
+  version: FORMATS.project.current, name, description: '', documents: ['modules'], assets: ['assets'],
   types: ['need', 'requirement', 'test'], statuses: ['draft', 'reviewed', 'approved', 'retired'],
   priorities: ['low', 'normal', 'high', 'critical'], linkTypes: ['satisfies', 'verifies', 'depends_on'], attributes: { owner: { type: 'string' } },
   requirement: { prefix: 'REQ', padding: 3, defaultType: 'requirement', defaultPriority: 'normal' },
@@ -20,7 +21,9 @@ export function parseConfig(source: string): ProjectConfig {
   if (doc.errors.length || doc.warnings.length) throw new Error(`项目配置无效：${(doc.errors[0] ?? doc.warnings[0]).message}`);
   visit(doc, { Alias() { throw new Error('项目配置不支持 YAML 别名'); } });
   const value = doc.toJS({ maxAliasCount: 0 });
-  if (!object(value) || value.version !== 1 || typeof value.name !== 'string' || !value.name.trim()) throw new Error('项目配置必须包含 version: 1 和非空 name');
+  if (!object(value)) throw new Error('项目配置必须是映射');
+  assertFormatVersion('project', value.version);
+  if (typeof value.name !== 'string' || !value.name.trim()) throw new Error('项目配置必须包含非空 name');
   const defaults = defaultConfig(value.name);
   for (const field of ['requirement', 'workflow', 'general', 'exports']) if (value[field] !== undefined && !object(value[field])) throw new Error(`项目配置 ${field} 必须是映射`);
   const config: ProjectConfig = { ...defaults, ...value,

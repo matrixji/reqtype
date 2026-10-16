@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reqtype.local/schemas/renderers-v1.schema.json",
+  "title": "ReqType local renderer settings v1",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "reqtype.renderers"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "jar",
+            "server"
+          ]
+        },
+        "jarPath": {
+          "type": "string"
+        },
+        "javaPath": {
+          "type": "string"
+        },
+        "graphvizPath": {
+          "type": "string"
+        },
+        "serverUrl": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "jarPath",
+        "javaPath",
+        "graphvizPath",
+        "serverUrl"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "payload"
+  ],
+  "additionalProperties": true
+}

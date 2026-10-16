@@ -1,0 +1,10 @@
+{
+  "mode": "jar",
+  "javaPath": "java",
+  "jarPath": "",
+  "graphvizPath": "",
+  "serverUrl": "http://127.0.0.1:8080/plantuml",
+  "x-vendor": {
+    "keep": 42
+  }
+}

@@ -3,24 +3,56 @@
   "title": "ReqType workspace exchange v1",
   "description": "原生工作区交换包。导入器还会检查相对路径、大小写冲突、文件大小、SHA-256、项目配置及需求身份。",
   "type": "object",
-  "required": ["format", "version", "files"],
+  "required": [
+    "format",
+    "version",
+    "files"
+  ],
   "properties": {
-    "format": { "const": "reqtype" },
-    "version": { "const": 1 },
-    "exportedAt": { "type": "string", "format": "date-time" },
+    "format": {
+      "const": "reqtype"
+    },
+    "version": {
+      "const": 1
+    },
+    "exportedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
     "files": {
       "type": "array",
       "maxItems": 10000,
       "items": {
         "type": "object",
-        "required": ["path", "encoding", "content", "sha256"],
+        "required": [
+          "path",
+          "encoding",
+          "content",
+          "sha256"
+        ],
         "properties": {
-          "path": { "type": "string", "minLength": 1, "description": "使用 / 的工作区相对路径；不允许穿越、符号链接、Git 内部文件或 Windows 保留名。" },
-          "encoding": { "enum": ["utf8", "base64"] },
-          "content": { "type": "string" },
-          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "使用 / 的工作区相对路径；不允许穿越、符号链接、Git 内部文件或 Windows 保留名。"
+          },
+          "encoding": {
+            "enum": [
+              "utf8",
+              "base64"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
         }
       }
     }
-  }
+  },
+  "$id": "https://reqtype.local/schemas/workspace-v1.schema.json",
+  "additionalProperties": true
 }

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reqtype.local/schemas/plugin-state-v1.schema.json",
+  "title": "ReqType plugin activation state v1",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "reqtype.plugin-state"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "disabled": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "disabled"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "payload"
+  ],
+  "additionalProperties": true
+}

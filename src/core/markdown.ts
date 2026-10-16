@@ -3,6 +3,7 @@ import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { parseDocument as parseYaml, isMap, stringify, visit } from 'yaml';
+import { assertFormatVersion, FORMATS } from './formats';
 import type { Diagnostic, FileSnapshot, ParsedDocument, ProjectConfig, Requirement, RequirementMeta } from '../shared/types';
 
 type Node = { type: string; value?: string; depth?: number; children?: Node[]; position?: { start: { offset?: number }; end: { offset?: number } } };
@@ -40,15 +41,16 @@ export function markdownTree(source: string): Node {
 }
 
 export function parseDocumentSource(path: string, source: string): ParsedDocument {
-  const result: ParsedDocument = { path, title: path.split('/').pop()?.replace(/\.md$/i, '') ?? path, requirements: [], diagnostics: [], headings: [], blocks: [] };
+  const result: ParsedDocument = { path, title: path.split('/').pop()?.replace(/\.md$/i, '') ?? path, requirements: [], diagnostics: [], headings: [], blocks: [], readOnly: false };
   const error = (from: number, message: string) => result.diagnostics.push({ path, from, severity: 'error', message });
   const fm = frontmatter(source);
   result.frontmatter = fm;
   if (fm) {
+    try { assertModuleWritable(source); } catch (cause) { result.readOnly = true; error(0, (cause as Error).message); return result; }
     try {
       const meta = readYaml(source.slice(fm.yamlFrom, fm.yamlTo));
       if (typeof meta.title === 'string') result.title = meta.title;
-      if (meta.reqtype !== undefined && meta.reqtype !== 1) error(0, `不支持的文档版本：${String(meta.reqtype)}`);
+      if (meta.reqtype !== undefined) { try { assertFormatVersion('module', meta.reqtype); } catch (cause) { result.readOnly = true; error(0, (cause as Error).message); return result; } }
       if (typeof meta.module === 'string' && uuid.test(meta.module)) result.moduleId = meta.module;
       else if (meta.module !== undefined) error(0, '模块 ID 必须是 UUID');
     } catch (cause) { error(0, `文档元数据：${(cause as Error).message}`); }
@@ -153,7 +155,18 @@ function patchYamlField(yaml: string, field: string, value: unknown): string {
   return yaml + (yaml.endsWith('\n') ? '' : eol) + `${field}: ${encoded}`;
 }
 
+export function moduleVersion(source: string): unknown {
+  const fm = frontmatter(source); if (!fm) return undefined;
+  const doc = parseYaml(source.slice(fm.yamlFrom, fm.yamlTo), { uniqueKeys: true });
+  return isMap(doc.contents) && doc.has('reqtype') ? doc.get('reqtype') : undefined;
+}
+export function assertModuleWritable(source: string) {
+  const version = moduleVersion(source);
+  if (version !== undefined) assertFormatVersion('module', version);
+}
+
 export function patchRequirement(source: string, req: Requirement, field: string, value: unknown) {
+  assertModuleWritable(source);
   if (field === 'id') throw new Error('稳定 ID 不可修改');
   const yaml = source.slice(req.metaFrom, req.metaTo);
   if (readYaml(yaml).id !== req.meta.id) throw new Error('条目位置已变化，请重新选择');
@@ -165,15 +178,15 @@ export function ensureModule(source: string, title: string, moduleId: string): s
   if (fm) {
     let yaml = source.slice(fm.yamlFrom, fm.yamlTo);
     const meta = readYaml(yaml);
-    if (meta.reqtype !== undefined && meta.reqtype !== 1) throw new Error('无法修改未知格式版本');
+    if (meta.reqtype !== undefined) assertFormatVersion('module', meta.reqtype);
     if (meta.module !== undefined && (typeof meta.module !== 'string' || !uuid.test(meta.module))) throw new Error('已有模块 ID 无效，请修复后继续');
-    if (meta.reqtype !== 1) yaml = patchYamlField(yaml, 'reqtype', 1);
+    if (meta.reqtype !== FORMATS.module.current) yaml = patchYamlField(yaml, 'reqtype', FORMATS.module.current);
     if (!meta.module) yaml = patchYamlField(yaml, 'module', moduleId);
     const tail = source.slice(fm.yamlTo);
     return source.slice(0, fm.yamlFrom) + yaml + (/^\r?\n/.test(tail) ? '' : eol) + tail;
   }
   const bom = source.startsWith('\uFEFF') ? '\uFEFF' : '';
-  return bom + ['---', 'reqtype: 1', `module: "${moduleId}"`, `title: ${JSON.stringify(title)}`, '---', '', ''].join(eol) + source.slice(bom.length);
+  return bom + ['---', `reqtype: ${FORMATS.module.current}`, `module: "${moduleId}"`, `title: ${JSON.stringify(title)}`, '---', '', ''].join(eol) + source.slice(bom.length);
 }
 
 export function makeRequirement(body: string, meta: RequirementMeta, eol = '\n') {
