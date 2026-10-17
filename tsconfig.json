@@ -16,13 +16,14 @@
     "noEmit": true,
     "types": [
       "node"
-    ]
+    ],
+    "allowImportingTsExtensions": true
   },
   "include": [
     "src",
     "tests",
     "vite.config.ts",
     "playwright.config.ts",
-    "scripts/data.mts"
+    "scripts/**/*.mts"
   ]
 }

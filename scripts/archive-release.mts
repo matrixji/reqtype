@@ -1,0 +1,10 @@
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { archiveName } from './release-utils.mts';
+const root=path.resolve(process.argv[2]??'release/ci'),output=path.resolve(process.argv[3]??'artifacts'),pkg=JSON.parse(await fs.readFile('package.json','utf8'));
+const name=archiveName(pkg.version,process.platform,process.arch),archive=path.join(output,name),folder=path.join(root,`ReqType-${process.platform}-${process.arch}`);
+await fs.mkdir(output,{recursive:true});await fs.access(folder);
+if(process.platform==='darwin')execFileSync('ditto',['-c','-k','--sequesterRsrc','--keepParent',path.join(folder,'ReqType.app'),archive],{stdio:'inherit'});
+else execFileSync('powershell.exe',['-NoProfile','-Command','$ErrorActionPreference="Stop"; Compress-Archive -LiteralPath $env:REQTYPE_PACKAGE -DestinationPath $env:REQTYPE_ARCHIVE -Force'],{stdio:'inherit',env:{...process.env,REQTYPE_PACKAGE:folder,REQTYPE_ARCHIVE:archive}});
+console.log(archive);

@@ -1,0 +1,14 @@
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { releaseManifest, validateTag } from './release-utils.mts';
+const directory=path.resolve(process.argv[2]??'artifacts'),pkg=JSON.parse(await fs.readFile('package.json','utf8')),tag=validateTag(process.env.RELEASE_TAG??'',pkg.version);
+if(process.env.GITHUB_EVENT_NAME!=='push'||process.env.GITHUB_REF_TYPE!=='tag'||process.env.GITHUB_REF_NAME!==tag)throw new Error('只允许版本 tag push 发布 Release');
+const manifest={...await releaseManifest(directory,pkg.version),commit:process.env.GITHUB_SHA};
+await fs.writeFile(path.join(directory,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
+await fs.writeFile(path.join(directory,'SHA256SUMS.txt'),manifest.files.map(file=>`${file.sha256}  ${file.name}`).join('\n')+'\n');
+const notes=path.join(directory,'release-notes.md');
+await fs.writeFile(notes,'本版本包含 macOS arm64 / x64 和 Windows x64 桌面包。\n\n当前 ZIP 为未签名的桌面预览发行，不是 Mac App Store 安装包，也未进行 Apple 公证或 Windows 签名。\n\n解压后运行；PlantUML JAR 已包含，使用本地 JAR 仍需 Java 21，Git 功能需要本机 Git。项目格式 v1 可显式升级为 v2，升级前请保存文档。\n\n使用 SHA256SUMS.txt 校验下载内容，manifest.json 记录版本与提交。\n');
+const existing=execFileSync('gh',['api',`repos/${process.env.GH_REPO}/releases`],{encoding:'utf8'});
+if(JSON.parse(existing).some((release:{tag_name:string})=>release.tag_name===tag))throw new Error('该版本 Release 已存在，不自动覆盖发行资产');
+execFileSync('gh',['release','create',tag,...manifest.files.map(file=>path.join(directory,file.name)),path.join(directory,'manifest.json'),path.join(directory,'SHA256SUMS.txt'),'--verify-tag','--title',`ReqType ${tag}`,'--notes-file',notes,'--generate-notes',...pkg.version.includes('-')?['--prerelease']:[]],{stdio:'inherit'});

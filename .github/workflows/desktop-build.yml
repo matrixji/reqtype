@@ -1,0 +1,68 @@
+name: Desktop build
+on:
+  workflow_call:
+    inputs:
+      artifact-prefix:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  desktop:
+    name: Desktop ${{ matrix.label }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64
+            runner: macos-15
+            platform: darwin
+            arch: arm64
+          - label: macOS x64
+            runner: macos-15-intel
+            platform: darwin
+            arch: x64
+          - label: Windows x64
+            runner: windows-2025
+            platform: win32
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Development desktop regression
+        run: npx playwright test --output=test-results/development
+      - name: Package native application
+        run: node scripts/package.mjs --platform=${{ matrix.platform }} --arch=${{ matrix.arch }} --out=release/ci
+      - name: Packaged desktop regression
+        run: node scripts/test-packaged.mts release/ci
+      - name: Archive release bundle
+        run: node scripts/archive-release.mts release/ci artifacts
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.artifact-prefix }}-${{ matrix.platform }}-${{ matrix.arch }}
+          path: artifacts/*.zip
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+      - name: Upload desktop evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: evidence-${{ inputs.artifact-prefix }}-${{ matrix.platform }}-${{ matrix.arch }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7

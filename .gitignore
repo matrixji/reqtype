@@ -8,3 +8,13 @@ playwright-report/
 .reqtype/cache/
 .reqtype/local/
 *.log
+artifacts/
+*.p12
+*.pfx
+*.provisionprofile
+*.mobileprovision
+AuthKey_*.p8
+*.keychain-db
+.env
+.env.*
+!.env.example

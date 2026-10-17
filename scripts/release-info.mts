@@ -1,0 +1,10 @@
+import { readFileSync, appendFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { validateVersion, validateTag } from './release-utils.mts';
+const pkg=JSON.parse(readFileSync('package.json','utf8')),lock=JSON.parse(readFileSync('package-lock.json','utf8'));
+const version=validateVersion(pkg.version),tag=process.env.GITHUB_REF_TYPE==='tag'?process.env.GITHUB_REF_NAME!:`v${version}`;
+validateTag(tag,version);
+if(lock.version!==version||lock.packages?.['']?.version!==version)throw new Error('package-lock.json 版本不同步');
+execFileSync('git',['merge-base','--is-ancestor','HEAD','refs/remotes/origin/main'],{stdio:'inherit'});
+if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,`tag=${tag}\n`);
+console.log(JSON.stringify({tag,version,publish:process.env.GITHUB_EVENT_NAME==='push'&&process.env.GITHUB_REF_TYPE==='tag'}));
