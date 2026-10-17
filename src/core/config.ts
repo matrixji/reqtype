@@ -5,7 +5,7 @@ import type { ProjectConfig } from '../shared/types';
 export const defaultConfig = (name = '我的需求项目'): ProjectConfig => ({
   version: FORMATS.project.current, name, description: '', documents: ['modules'], assets: ['assets'],
   types: ['need', 'requirement', 'test'], statuses: ['draft', 'reviewed', 'approved', 'retired'],
-  priorities: ['low', 'normal', 'high', 'critical'], linkTypes: ['satisfies', 'verifies', 'depends_on'], attributes: { owner: { type: 'string' } },
+  priorities: ['low', 'normal', 'high', 'critical'], linkTypes: ['satisfies', 'verifies', 'depends_on'], attributes: { owner: { type: 'string' } }, typeAttributes: { need: ['owner'], requirement: ['owner'], test: ['owner'] },
   requirement: { prefix: 'REQ', padding: 3, defaultType: 'requirement', defaultPriority: 'normal' },
   workflow: { initial: 'draft', transitions: { draft: ['reviewed'], reviewed: ['draft', 'approved'], approved: ['reviewed', 'retired'], retired: ['draft'] } },
   general: { defaultView: 'document', spellcheck: false },
@@ -51,7 +51,15 @@ export function parseConfig(source: string): ProjectConfig {
   if (!['document', 'table'].includes(config.general.defaultView) || typeof config.general.spellcheck !== 'boolean') throw new Error('通用设置无效');
   if (!['json', 'markdown'].includes(config.exports.defaultFormat) || typeof config.exports.prettyJson !== 'boolean' || typeof config.exports.fileName !== 'string' || !config.exports.fileName.trim() || /[/\\<>:"|?*\x00-\x1F]/.test(config.exports.fileName) || /\{(?!project\}|date\}|module\})/.test(config.exports.fileName)) throw new Error('导出设置无效，文件名支持 {project}、{date}、{module}');
   if (config.attributes !== undefined && !object(config.attributes)) throw new Error('attributes 必须是属性定义映射');
-  for (const [key, def] of Object.entries(config.attributes ?? {})) if (!object(def) || !['string', 'number', 'boolean', 'enum'].includes(def.type) || (def.type === 'enum' && !strings(def.values))) throw new Error(`属性定义无效：${key}`);
+  for (const [key, def] of Object.entries(config.attributes ?? {})) if (!object(def) || !['string', 'number', 'array', 'boolean', 'enum'].includes(def.type) || (def.type === 'enum' && !strings(def.values)) || (def.type === 'array' && def.items !== undefined && !['string','number'].includes(def.items)) || (def.label !== undefined && typeof def.label !== 'string') || (def.description !== undefined && typeof def.description !== 'string') || !key.trim() || key.length > 80 || ['__proto__','constructor','prototype'].includes(key)) throw new Error(`属性定义无效：${key}`);
+  if (config.version === 1) {
+    if (Object.values(config.attributes ?? {}).some(def => def.type === 'array') || value.typeAttributes !== undefined) throw new Error('按类型属性与数组需要项目格式 v2，请先检查并升级数据格式');
+    delete config.typeAttributes;
+  } else {
+    config.typeAttributes = value.typeAttributes ?? Object.fromEntries(config.types.map(type => [type, Object.keys(config.attributes ?? {})]));
+    if (!object(config.typeAttributes)) throw new Error('typeAttributes 必须是类型到属性列表的映射');
+    for (const [type, names] of Object.entries(config.typeAttributes!)) if (!config.types.includes(type) || !strings(names, true) || names.some(name => !Object.hasOwn(config.attributes ?? {}, name))) throw new Error(`类型属性定义无效：${type}`);
+  }
   return config;
 }
 
@@ -66,11 +74,11 @@ export function patchProjectConfig(source: string, config: ProjectConfig): strin
   };
   for (const field of ['version', 'id', 'name', 'description', 'documents', 'assets', 'types', 'statuses', 'priorities', 'linkTypes', 'requirement', 'general', 'exports'] as const) if (config[field] !== undefined) merge([field], config[field]);
   // Removed transitions/attribute definitions must actually disappear; preserve unknown settings elsewhere.
-  for (const field of ['workflow', 'attributes'] as const) {
+  for (const field of ['workflow', 'attributes', 'typeAttributes'] as const) {
     const current = doc.get(field, true);
     if (field === 'workflow' && isMap(current)) { merge(['workflow', 'initial'], config.workflow.initial); const map = doc.getIn(['workflow', 'transitions'], true); if (isMap(map)) for (const pair of [...map.items]) if (!Object.hasOwn(config.workflow.transitions, String(pair.key))) map.delete(pair.key); merge(['workflow', 'transitions'], config.workflow.transitions); }
-    else if (field === 'attributes' && isMap(current)) { for (const pair of [...current.items]) if (!Object.hasOwn(config.attributes ?? {}, String(pair.key))) current.delete(pair.key); merge([field], config.attributes ?? {}); }
-    else merge([field], config[field] ?? {});
+    else if ((field === 'attributes' || field === 'typeAttributes') && isMap(current)) { for (const pair of [...current.items]) if (!Object.hasOwn(config[field] ?? {}, String(pair.key))) current.delete(pair.key); merge([field], config[field] ?? {}); }
+    else if (config[field] !== undefined) merge([field], config[field]);
   }
   const output = doc.toString({ lineWidth: 0 });
   return source.includes('\r\n') ? output.replace(/\r?\n/g, '\r\n') : output;
@@ -83,4 +91,14 @@ export function exportFileName(config: ProjectConfig, kind: 'json' | 'markdown',
   const safe = (text: string) => text.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/[. ]+$/, '') || 'project';
   const stem = config.exports.fileName.replace(/\{project\}/g, safe(config.name)).replace(/\{date\}/g, date.toISOString().slice(0, 10)).replace(/\{module\}/g, safe(document.split('/').pop()?.replace(/\.md$/i, '') || 'document'));
   return safe(stem) + (kind === 'json' ? '.reqtype.json' : '.md');
+}
+
+export function attributesForType(config: ProjectConfig, type: string) {
+  const names = config.version === 1 ? Object.keys(config.attributes ?? {}) : Object.hasOwn(config.typeAttributes ?? {},type) ? config.typeAttributes![type] : [];
+  return Object.fromEntries(names.filter(name => Object.hasOwn(config.attributes ?? {}, name)).map(name => [name, config.attributes![name]]));
+}
+export function validAttribute(value: unknown, definition: NonNullable<ProjectConfig['attributes']>[string]) {
+  if (definition.type === 'array') return Array.isArray(value) && value.every(item => typeof item === (definition.items ?? 'string') && (typeof item !== 'number' || Number.isFinite(item)));
+  if (definition.type === 'enum') return typeof value === 'string' && Boolean(definition.values?.includes(value));
+  return typeof value === definition.type && (typeof value !== 'number' || Number.isFinite(value));
 }

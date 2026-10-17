@@ -1,6 +1,7 @@
+export interface AttributeDefinition { type: 'string' | 'number' | 'array' | 'boolean' | 'enum'; label?: string; description?: string; values?: string[]; items?: 'string' | 'number'; [key: string]: unknown }
 export interface Link { type: string; target: string }
 export interface RequirementMeta {
-  id: string; key?: string; type?: string; status?: string; priority?: string;
+  id: string; key?: string; title?: string; type?: string; status?: string; priority?: string;
   tags?: string[]; links?: Link[]; attributes?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -13,13 +14,14 @@ export interface Heading { depth: number; text: string; from: number }
 export interface ParsedDocument { readOnly: boolean; path: string; moduleId?: string; title: string; requirements: Requirement[]; diagnostics: Diagnostic[]; headings: Heading[]; frontmatter?: { from: number; to: number; yamlFrom: number; yamlTo: number }; blocks: { from: number; to: number; type: string }[] }
 export interface FileSnapshot { path: string; content: string; version: string }
 export interface ProjectConfig {
-  version: 1; id?: string; name: string; description?: string; documents: string[]; assets: string[];
+  version: 1 | 2; id?: string; name: string; description?: string; documents: string[]; assets: string[];
   types: string[]; statuses: string[]; priorities: string[]; linkTypes: string[];
   requirement: { prefix: string; padding: number; defaultType: string; defaultPriority: string };
   workflow: { initial: string; transitions: Record<string, string[]> };
   general: { defaultView: 'document' | 'table'; spellcheck: boolean };
   exports: { defaultFormat: 'json' | 'markdown'; fileName: string; prettyJson: boolean };
-  attributes?: Record<string, { type: 'string' | 'number' | 'boolean' | 'enum'; values?: string[] }>;
+  attributes?: Record<string, AttributeDefinition>;
+  typeAttributes?: Record<string, string[]>;
 }
 export interface PlantUMLSettings { mode: 'jar' | 'server'; jarPath: string; javaPath: string; graphvizPath: string; serverUrl: string }
 export interface RendererSettings { settings: PlantUMLSettings; version: string | null }
@@ -38,6 +40,7 @@ export interface PluginContribution { id: string; title: string; extension?: str
 export interface PluginInfo { id: string; name: string; version: string; enabled: boolean; builtin: boolean; error?: string; commands: PluginContribution[]; validators: PluginContribution[]; exporters: PluginContribution[]; importers: PluginContribution[]; renderers: PluginContribution[] }
 export interface PluginSnapshot { files: FileSnapshot[]; requirements: Requirement[]; config: ProjectConfig }
 export interface PluginResult { html?: string; message?: string; diagnostics?: Diagnostic[]; text?: string; files?: { path: string; content: string }[]; importPreview?: ImportPreview; edits?: { path: string; expectedSource: string; source: string }[] }
+export interface TypeMigrationPreview { token: string; from: string; to: string; entries: { path: string; id: string; key?: string; title: string }[]; warnings: string[] }
 export interface DesktopAPI {
   initial(): Promise<WorkspaceSnapshot | null>;
   open(create?: boolean): Promise<WorkspaceSnapshot | null>;
@@ -48,6 +51,8 @@ export interface DesktopAPI {
   export(kind: 'json' | 'markdown', path?: string): Promise<string | null>;
   prepareImport(): Promise<ImportPreview | null>;
   applyImport(token: string, paths: string[]): Promise<WorkspaceSnapshot>;
+  previewTypeMigration(from: string, to: string): Promise<TypeMigrationPreview>;
+  applyTypeMigration(token: string): Promise<WorkspaceSnapshot>;
   previewMigrations(): Promise<MigrationPreview>;
   applyMigrations(token: string): Promise<{ snapshot: WorkspaceSnapshot; backupId: string | null }>;
   restoreMigration(id: string): Promise<WorkspaceSnapshot>;

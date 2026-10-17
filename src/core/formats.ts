@@ -1,6 +1,6 @@
 /** Data versions are independent of the application version and file content hashes. */
 export const FORMATS = {
-  project: { name: '项目配置', id: 'reqtype.project', current: 1 },
+  project: { name: '项目配置', id: 'reqtype.project', current: 2 },
   module: { name: 'Markdown 模块', id: 'reqtype.module', current: 1 },
   exchange: { name: '交换包', id: 'reqtype', current: 1 },
   renderers: { name: '本机渲染设置', id: 'reqtype.renderers', current: 1 },
@@ -17,8 +17,8 @@ export class FormatVersionError extends Error {
   }
 }
 export const isRecord = (value: unknown): value is Record<string, any> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
-export function assertFormatVersion(kind: FormatKind, value: unknown): asserts value is 1 {
-  if (!Number.isSafeInteger(value) || value !== FORMATS[kind].current) throw new FormatVersionError(kind, value);
+export function assertFormatVersion(kind: FormatKind, value: unknown): asserts value is 1 | 2 {
+  if (!Number.isSafeInteger(value) || !(value === FORMATS[kind].current || kind === 'project' && value === 1)) throw new FormatVersionError(kind, value);
 }
 export function readEnvelope<T>(kind: 'renderers' | 'journal' | 'preferences' | 'plugins', input: unknown, validate: (payload: unknown) => T): { value: T; legacy: boolean; envelope: Record<string, any> } {
   if (kind === 'plugins' && Array.isArray(input)) return { value: validate(input), legacy: true, envelope: {} };

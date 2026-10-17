@@ -355,3 +355,83 @@ links:
 在临时项目验证预览零写入、备份早于首写、过期或变更计划拒绝、失败回滚、日志恢复、重复执行、损坏备份和后续人工编辑保护、附件与交换往返；在真实 Electron 中回归升级和恢复操作。每次修改相关行为时同步维护对应自动化用例与回归矩阵。
 
 <!-- /req -->
+
+<!-- req
+id: 51ddc5c0-90f1-4758-ab9a-e427d42c7183
+key: REQTYPE-006
+title: 验证编号只读与项目唯一性
+type: test
+status: draft
+priority: high
+tags:
+  - v0.2.0
+links:
+  - type: verifies
+    target: b466ed76-4bf9-48ca-91d8-6234bd2959d7
+-->
+
+### 验证编号只读与项目唯一性
+
+在多个模块新建及复制条目，核对项目配置前缀和自动递增。通过源码保存与导入尝试重复或改写已有编号，确认拒绝且原文件未变。
+
+<!-- /req -->
+
+<!-- req
+id: 58a85ed8-7905-41b5-a230-b273b271fddd
+key: REQTYPE-007
+title: 验证类型套餐、迁移与在用删除保护
+type: test
+status: draft
+priority: high
+tags:
+  - v0.2.0
+links:
+  - type: verifies
+    target: 1e53c58e-87e8-4420-946c-468c6222f4a0
+-->
+
+### 验证类型套餐、迁移与在用删除保护
+
+通过 UI 应用套餐与自定义类型，确认在用类型禁止删除；跨模块预览并迁移全部匹配条目，逐字节核对仅类型变化。验证过期／外部变更计划拒绝及中途故障回滚。
+
+<!-- /req -->
+
+<!-- req
+id: 23561418-3d26-475e-b2bc-9f62e9e28231
+key: REQTYPE-008
+title: 验证按类型属性及项目升级
+type: test
+status: draft
+priority: high
+tags:
+  - v0.2.0
+links:
+  - type: verifies
+    target: 2b1642b4-7e99-4b67-9a21-4bb8dc84f764
+-->
+
+### 验证按类型属性及项目升级
+
+通过表单创建文本、数值和数组属性并绑定类型，填写后保存与重启；错误数据类型和在用定义删除受到保护。旧项目显式升级为 v2，保留全局属性语义与原文备份，可恢复 v1。
+
+<!-- /req -->
+
+<!-- req
+id: 372aa283-8b84-4290-9f24-ecfa187834a8
+key: REQTYPE-009
+title: 验证独立标题与部分匹配
+type: test
+status: draft
+priority: high
+tags:
+  - v0.2.0
+links:
+  - type: verifies
+    target: c4c96618-f764-419d-96c0-86e9506e2f8d
+-->
+
+### 验证独立标题与部分匹配
+
+填写与正文不同的标题，输入其中一段在表格中匹配；关联选择可按标题过滤。核对元数据标题、UUID、正文和原始换行保留，留空仍使用正文标题，导出包含标题。
+
+<!-- /req -->

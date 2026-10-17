@@ -3,6 +3,7 @@ import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { parseDocument as parseYaml, isMap, stringify, visit } from 'yaml';
+import { attributesForType, validAttribute } from './config';
 import { assertFormatVersion, FORMATS } from './formats';
 import type { Diagnostic, FileSnapshot, ParsedDocument, ProjectConfig, Requirement, RequirementMeta } from '../shared/types';
 
@@ -71,7 +72,7 @@ export function parseDocumentSource(path: string, source: string): ParsedDocumen
       try {
         const meta = readYaml(match[2]);
         if (typeof meta.id !== 'string' || !uuid.test(meta.id)) throw new Error('条目 ID 必须是 UUID');
-        for (const field of ['key', 'type', 'status', 'priority']) if (meta[field] !== undefined && typeof meta[field] !== 'string') throw new Error(`${field} 必须是字符串`);
+        for (const field of ['key', 'title', 'type', 'status', 'priority']) if (meta[field] !== undefined && typeof meta[field] !== 'string') throw new Error(`${field} 必须是字符串`);
         if (meta.tags !== undefined && (!Array.isArray(meta.tags) || meta.tags.some(x => typeof x !== 'string'))) throw new Error('tags 必须是字符串列表');
         if (meta.attributes !== undefined && (!meta.attributes || typeof meta.attributes !== 'object' || Array.isArray(meta.attributes))) throw new Error('attributes 必须是键值映射');
         if (meta.links !== undefined && (!Array.isArray(meta.links) || meta.links.some(link => !link || typeof link.type !== 'string' || typeof link.target !== 'string' || !uuid.test(link.target)))) throw new Error('links 必须包含关联类型和目标 UUID');
@@ -83,7 +84,7 @@ export function parseDocumentSource(path: string, source: string): ParsedDocumen
         const body = source.slice(open.end, from).trim();
         const bodyTree = markdownTree(body);
         const first = bodyTree.children?.find(node => node.type !== 'html');
-        const title = (first ? textOf(first) : '').replace(/\s+/g, ' ').slice(0, 100) || open.meta.key || '未命名需求';
+        const title = open.meta.title?.trim() || (first ? textOf(first) : '').replace(/\s+/g, ' ').slice(0, 100) || open.meta.key || '未命名需求';
         result.requirements.push({ path, meta: open.meta, title, body, from: open.from, to, metaFrom: open.metaFrom, metaTo: open.metaTo, bodyFrom: open.end, bodyTo: from });
       }
       open = undefined;
@@ -116,10 +117,12 @@ export function indexWorkspace(files: Pick<FileSnapshot, 'path' | 'content'>[], 
       const value = req.meta[field] ?? (field === 'type' ? 'requirement' : field === 'status' ? 'draft' : undefined);
       if (value && !allowed.includes(value as string)) add(req, `未定义的 ${field}：${String(value)}`);
     }
+    const allowedAttributes = attributesForType(config, req.meta.type ?? config.requirement.defaultType);
+    for (const name of Object.keys(req.meta.attributes ?? {})) if (Object.hasOwn(config.attributes ?? {}, name) && !Object.hasOwn(allowedAttributes,name)) add(req, `自定义属性 ${name} 未为当前类型启用，原值已保留`, 'warning');
     for (const [name, definition] of Object.entries(config.attributes ?? {})) {
       const value = req.meta.attributes?.[name];
       if (value === undefined) continue;
-      if (definition.type === 'enum' ? !definition.values?.includes(value as string) : typeof value !== definition.type) add(req, `自定义属性 ${name} 的值不符合项目定义`);
+      if (!validAttribute(value, definition)) add(req, `自定义属性 ${name} 的值不符合项目定义`);
     }
   }
   for (const [id, matches] of ids) if (matches.length > 1) matches.forEach(req => add(req, `重复的条目 ID：${id}`));
@@ -167,6 +170,7 @@ export function assertModuleWritable(source: string) {
 
 export function patchRequirement(source: string, req: Requirement, field: string, value: unknown) {
   assertModuleWritable(source);
+  if (field === 'key') throw new Error('可读编号由项目自动生成，不允许手动修改');
   if (field === 'id') throw new Error('稳定 ID 不可修改');
   const yaml = source.slice(req.metaFrom, req.metaTo);
   if (readYaml(yaml).id !== req.meta.id) throw new Error('条目位置已变化，请重新选择');
@@ -223,5 +227,6 @@ export function nextKey(requirements: Requirement[], prefix = 'REQ', padding = 3
   let number = 1;
   const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   for (const key of used) { const match = key?.match(new RegExp(`^${escaped}-(\\d+)$`)); if (match) number = Math.max(number, Number(match[1]) + 1); }
+  if (!Number.isSafeInteger(number) || number < 1) throw new Error('编号超出安全整数范围，请调整项目前缀');
   return `${prefix}-${String(number).padStart(padding, '0')}`;
 }

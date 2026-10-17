@@ -3,8 +3,8 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { stringify } from 'yaml';
 import { defaultPlantuml, readRendererDocument, writeRendererDocument } from '../core/rendering';
-import { defaultConfig, parseConfig, patchProjectConfig, validateRelativePath } from '../core/config';
-import { assertModuleWritable, ensureModule, indexWorkspace, makeRequirement } from '../core/markdown';
+import { attributesForType, defaultConfig, parseConfig, patchProjectConfig, validateRelativePath } from '../core/config';
+import { assertModuleWritable, ensureModule, indexWorkspace, makeRequirement, parseDocumentSource } from '../core/markdown';
 import { envelope, isRecord, readEnvelope } from '../core/formats';
 import type { FileSnapshot, ProjectConfig, ProjectSettings, RendererSettings, WorkspaceSnapshot } from '../shared/types';
 
@@ -173,9 +173,12 @@ export class Workspace {
     const previous = await this.projectSettings();
     if (previous.version !== expected) throw new Error('项目配置已被外部修改，请重新载入设置后再保存');
     if (previous.config.id && input.id !== previous.config.id) throw new Error('项目稳定 ID 不允许修改');
+    if (input.version !== previous.config.version) throw new Error('项目格式版本只能通过数据格式迁移升级，不能直接更改');
     const config = parseConfig(stringify({ ...input, id: previous.config.id ?? randomUUID() }));
     const before = await this.snapshot(), beforeIndex = indexWorkspace(before.files, previous.config);
     for (const name of Object.keys(previous.config.attributes ?? {})) if (!Object.hasOwn(config.attributes ?? {}, name) && beforeIndex.requirements.some(req => Object.hasOwn(req.meta.attributes ?? {}, name))) throw new Error(`自定义属性 ${name} 仍被条目使用，请先迁移后再移除定义`);
+    for (const type of previous.config.types) if (!config.types.includes(type) && beforeIndex.requirements.some(req => (req.meta.type ?? 'requirement') === type)) throw new Error(`条目类型 ${type} 仍被条目使用，请先迁移后再删除`);
+    for (const req of beforeIndex.requirements) { const type = req.meta.type ?? 'requirement'; const old = attributesForType(previous.config,type), next = attributesForType(config,type); for (const name of Object.keys(old)) if (!Object.hasOwn(next,name) && Object.hasOwn(req.meta.attributes ?? {},name)) throw new Error(`属性 ${name} 仍被 ${type} 条目使用，不能移除类型绑定`); }
     const oldErrors = new Set(beforeIndex.diagnostics.filter(x => x.severity === 'error').map(x => `${x.path}:${x.id}:${x.message}`));
     const problems = indexWorkspace(before.files, config).diagnostics.filter(x => x.severity === 'error' && !oldErrors.has(`${x.path}:${x.id}:${x.message}`));
     if (problems.length) throw new Error(`设置会使现有条目无效：${problems[0].message}。请先迁移使用这些定义的条目`);
@@ -230,6 +233,17 @@ export class Workspace {
     const target = await safePath(this.root, relative), old = await readOptional(target);
     if (old) assertModuleWritable(decode(old));
     assertModuleWritable(content);
+    const snapshot = await this.snapshot(), before = indexWorkspace(snapshot.files, config);
+    const previous = new Map(before.requirements.map(req => [req.meta.id, req]));
+    for (const req of parseDocumentSource(relative, content).requirements) {
+      const original = previous.get(req.meta.id);
+      if (original?.meta.key && original.meta.key !== req.meta.key) throw new Error('可读编号由项目自动生成，已有编号不允许修改');
+      if (!original) { const prefix=config.requirement.prefix+'-', suffix=req.meta.key?.startsWith(prefix) ? req.meta.key.slice(prefix.length) : ''; if (!suffix || !/^\d+$/.test(suffix) || !Number.isSafeInteger(Number(suffix)) || Number(suffix)<1) throw new Error('新条目须使用项目前缀和自动生成的正整数编号'); }
+    }
+    const oldErrors = new Set(before.diagnostics.filter(d=>d.severity==='error').map(d=>`${d.path}:${d.id}:${d.message}`));
+    const candidate = snapshot.files.filter(file=>file.path!==relative).concat({path:relative,content,version:''});
+    const newErrors = indexWorkspace(candidate,config).diagnostics.filter(d=>d.severity==='error' && !oldErrors.has(`${d.path}:${d.id}:${d.message}`));
+    if(newErrors.length)throw new Error(`保存会产生项目错误：${newErrors[0].message}`);
     await atomicWrite(target, Buffer.from(content), expected);
     return { path: relative, content, version: digest(content) };
   }

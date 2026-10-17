@@ -7,6 +7,7 @@ const api: DesktopAPI = {
   save: (path, content, version) => invoke('save', path, content, version),
   projectSettings: () => invoke('projectSettings'), saveProject: (config, version, renderers) => invoke('saveProject', config, version, renderers),
   export: (kind, path) => invoke('export', kind, path), prepareImport: () => invoke('prepareImport'), applyImport: (token, paths) => invoke('applyImport', token, paths),
+  previewTypeMigration: (from,to) => invoke('previewTypeMigration',from,to), applyTypeMigration: token => invoke('applyTypeMigration',token),
   previewMigrations: () => invoke('previewMigrations'), applyMigrations: token => invoke('applyMigrations', token), restoreMigration: id => invoke('restoreMigration', id), migrationBackups: () => invoke('migrationBackups'),
   gitState: () => invoke('gitState'), gitInit: () => invoke('gitInit'), gitDiff: (path, original) => invoke('gitDiff', path, original), gitShow: hash => invoke('gitShow', hash), gitCommit: (paths, message, identity) => invoke('gitCommit', paths, message, identity),
   renderPlantuml: (code, documentPath) => invoke('renderPlantuml', code, documentPath), selectRendererFile: kind => invoke('selectRendererFile', kind),

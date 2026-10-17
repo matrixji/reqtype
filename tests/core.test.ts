@@ -148,6 +148,7 @@ test('打开工作区会恢复中断的导入日志', async t => {
 
 test('附件缺失会阻止不完整导出，导入预览显示缺失附件', async t => {
   const root = await directory(t), ws = await Workspace.create(root);
+  const settings=await ws.projectSettings();await ws.saveProject({...settings.config,requirement:{...settings.config.requirement,prefix:'IMAGE'}},settings.version);
   const source = moduleSource(makeRequirement('![示意](../assets/missing.png)', { ...meta(), key: 'IMAGE-001' }));
   await ws.save('modules/images.md', source, null);
   await assert.rejects(exportWorkspace(ws), /附件/);
@@ -166,6 +167,7 @@ test('工作区保护跨平台大小写路径冲突和 Windows 保留名', async
 
 test('工作区 JSON 往返保留原文、未知字段和二进制附件', async t => {
   const root = await directory(t), target = await directory(t), source = await Workspace.create(root);
+  const settings=await source.projectSettings();await source.saveProject({...settings.config,requirement:{...settings.config.requirement,prefix:'CUSTOM'}},settings.version);
   const raw = '\uFEFF' + moduleSource(makeRequirement('表格\n\n| a | b |\n| --- | --- |\n| 1 | 2 |', { ...meta(), key: 'CUSTOM-001', 'x-example': { keep: true } })).replace(/\n/g, '\r\n');
   await source.save('modules/custom.md', raw, null);
   await fs.mkdir(path.join(root, 'assets'));

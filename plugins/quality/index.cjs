@@ -17,7 +17,7 @@ exports.activate = api => {
   } });
   api.registerExporter({ id: 'csv', title: '条目表格 CSV', extension: 'csv', export(snapshot) {
     const cell = value => '"' + String(value ?? '').replace(/"/g, '""') + '"';
-    return '\uFEFF' + [['编号', 'ID', '类型', '状态', '优先级', '模块', '正文', '关联'], ...snapshot.requirements.map(req => [req.meta.key, req.meta.id, req.meta.type || 'requirement', req.meta.status || 'draft', req.meta.priority, req.path, req.body, JSON.stringify(req.meta.links || [])])].map(row => row.map(cell).join(',')).join('\r\n');
+    return '\uFEFF' + [['编号', 'ID', '标题', '类型', '状态', '优先级', '模块', '正文', '关联'], ...snapshot.requirements.map(req => [req.meta.key, req.meta.id, req.title, req.meta.type || 'requirement', req.meta.status || 'draft', req.meta.priority, req.path, req.body, JSON.stringify(req.meta.links || [])])].map(row => row.map(cell).join(',')).join('\r\n');
   } });
   api.registerImporter({ id: 'lines', title: '按行导入文本', extensions: ['txt'], import(input, snapshot) {
     const rows = input.text.replace(/^\uFEFF/, '').split(/\r?\n/).map(x => x.trim()).filter(Boolean);

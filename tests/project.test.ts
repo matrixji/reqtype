@@ -53,7 +53,7 @@ test('项目设置保存不改条目，稳定 ID、外部冲突和在用定义�
   await assert.rejects(workspace.saveProject(invalid, current.version), /现有条目无效/);
   await assert.rejects(workspace.saveProject({ ...current.config, id: '00000000-0000-4000-8000-000000000000' }, current.version), /稳定 ID/);
   await fs.writeFile(file, source.replace('priority: normal', 'priority: normal\nattributes: {owner: tester}'));
-  const removed = structuredClone(current.config); delete removed.attributes?.owner;
+  const removed = structuredClone(current.config); delete removed.attributes?.owner;removed.typeAttributes=Object.fromEntries(removed.types.map(type=>[type,[]]));
   await assert.rejects(workspace.saveProject(removed, current.version), /仍被条目使用/);
   await fs.appendFile(path.join(root, '.reqtype/project.yaml'), '\n# external change\n');
   await assert.rejects(workspace.saveProject(config, current.version), /外部修改/);

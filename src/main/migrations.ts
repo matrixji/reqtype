@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { FORMATS, assertFormatVersion, isRecord, migrateSource, type MigrationDefinition } from '../core/formats';
 import { ensureModule, indexWorkspace, moduleVersion, parseDocumentSource } from '../core/markdown';
-import { parseConfig, validateRelativePath } from '../core/config';
+import { parseConfig, patchProjectConfig, validateRelativePath } from '../core/config';
 import { readRendererDocument, writeRendererDocument } from '../core/rendering';
 import { Workspace, applyTransaction, atomicWrite, decode, digest, exists, readJournalDocument, readOptional, safePath, writeJournalDocument } from './workspace';
 import type { MigrationPreview, MigrationEntry, MigrationBackupInfo } from '../shared/types';
@@ -21,7 +21,7 @@ const moduleDefinition = (file: string): MigrationDefinition => ({
 });
 export function migrateDataSource(kind: MigratableKind, source: string, file = 'module.md') {
   if (kind === 'module') return migrateSource(source, moduleDefinition(file));
-  if (kind === 'project') return migrateSource(source, { current: FORMATS.project.current, readVersion(text) { return parseConfig(text).version; }, validate: text => { parseConfig(text); }, steps: [] });
+  if (kind === 'project') return migrateSource(source, { current: FORMATS.project.current, readVersion(text) { return parseConfig(text).version; }, validate: text => { parseConfig(text); }, steps: [{ from: 1, to: 2, id: 'project-1-to-2', transform(text) { const config = parseConfig(text); return patchProjectConfig(text, { ...config, version: 2, typeAttributes: Object.fromEntries(config.types.map(type => [type, Object.keys(config.attributes ?? {})])) }); } }] });
   if (kind === 'renderers') return migrateSource(source, {
     current: FORMATS.renderers.current, readVersion: text => readRendererDocument(text).legacy ? 0 : 1,
     validate: text => { readRendererDocument(text); },
@@ -60,7 +60,7 @@ async function inspect(workspace: Workspace): Promise<Inspection> {
     for (const file of await workspace.paths(documents, true)) await inspectFile(file, 'module');
     const snapshot = await workspace.snapshot();
     const candidate = snapshot.files.map(file => ({ path: file.path, content: updates.find(update => update.path === file.path)?.bytes.toString('utf8') ?? file.content }));
-    for (const error of indexWorkspace(candidate, config.config).diagnostics.filter(error => error.severity === 'error')) {
+    for (const error of indexWorkspace(candidate, updates.some(update=>update.kind==='project') ? parseConfig(updates.find(update=>update.kind==='project')!.bytes.toString('utf8')) : config.config).diagnostics.filter(error => error.severity === 'error')) {
       const row = entries.find(entry => entry.path === error.path);
       if (row) { row.status = 'blocked'; row.message = [...new Set([row.message, error.message].filter(Boolean))].join('；'); }
     }

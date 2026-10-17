@@ -69,6 +69,7 @@ test('界面编辑、属性撤销、关联、新条目与重启保存', async ()
   await page.getByRole('button', { name: '添加关联', exact: true }).click();
   await expect(page.locator('.relation-card')).toHaveCount(2);
   await page.getByText('自定义属性', { exact: true }).click();
+  await page.getByText('高级：属性 JSON', {exact:true}).click();
   const attributesField = page.getByLabel('属性 JSON', { exact: true });
   const values = JSON.parse(await attributesField.inputValue()); values.owner = '工程作者';
   await attributesField.fill(JSON.stringify(values, null, 2)); await attributesField.press('Tab');
@@ -154,6 +155,7 @@ test('交换预览、插件生命周期和本地 Git 提交', async () => {
   const csvPath = path.join(userData, 'export.csv'); await saveDialog(csvPath);
   await page.getByRole('button', { name: '条目表格 CSV', exact: true }).click();
   await expect.poll(async () => fs.readFile(csvPath, 'utf8').catch(() => '')).toContain('SYS-001');
+  expect(await fs.readFile(csvPath,'utf8')).toContain('标题');
   await page.getByRole('button', { name: '停用 需求工具箱', exact: true }).click();
   await expect(page.getByRole('button', { name: '统计需求', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: '启用 需求工具箱', exact: true }).click();
@@ -351,4 +353,59 @@ test('未来本机偏好和插件状态保留原文，插件不会意外自动�
   await expect(page.getByRole('status')).toContainText('已停用插件并保留原文件');
   expect(await fs.readFile(path.join(userData,'plugins/disabled.json'),'utf8')).toBe(pluginState);
   expect(await fs.access(marker).then(()=>true).catch(()=>false)).toBe(false);
+});
+
+test('项目类型套餐、属性表单、标题检索与全项目类型迁移',async({},info)=>{
+  await page.getByRole('button',{name:'项目设置',exact:true}).click();
+  await page.getByText('高级：自定义属性定义 JSON',{exact:true}).click();
+  const json=page.getByLabel('自定义属性定义 JSON',{exact:true}),originalDefinitions=await json.inputValue();await json.fill('{"broken":null}');await page.getByRole('button',{name:'保存项目设置',exact:true}).click();await expect(page.getByRole('status')).toContainText('属性定义无效');await json.fill(originalDefinitions);
+  await page.getByRole('button',{name:'添加Jira 默认套餐',exact:true}).click();
+  await page.getByRole('button',{name:'添加ASPICE 参考套餐',exact:true}).click();
+  await page.getByLabel('新条目类型',{exact:true}).fill('产品需求');
+  await page.getByRole('button',{name:'添加条目类型',exact:true}).click();
+  for(const [name,title,type] of [['effort','工作量','number'],['platforms','支持平台','array'],['note','说明','string']]) {
+    await page.getByLabel('新属性标识',{exact:true}).fill(name);await page.getByLabel('新属性名称',{exact:true}).fill(title);await page.getByLabel('新属性数据类型',{exact:true}).selectOption(type);
+    await page.getByRole('button',{name:'添加属性定义',exact:true}).click();
+    await page.getByLabel(`产品需求 使用属性 ${name}`,{exact:true}).check();await page.getByLabel(`Story 使用属性 ${name}`,{exact:true}).check();
+  }
+  await page.getByRole('button',{name:'保存项目设置',exact:true}).click();await expect(page.getByRole('status')).toContainText('项目设置已保存');
+  await page.getByRole('button',{name:'条目表格',exact:true}).click();await page.locator('.table-key').getByText('SYS-001',{exact:true}).click();
+  await expect(page.getByLabel('可读编号',{exact:true})).toHaveAttribute('readonly','');
+  await page.getByLabel('条目标题',{exact:true}).fill('跨模块产品标题匹配');await page.getByLabel('条目标题',{exact:true}).press('Tab');
+  await page.getByLabel('条目类型',{exact:true}).selectOption('产品需求');await page.getByText('自定义属性',{exact:true}).click();
+  await page.getByLabel('选择自定义属性',{exact:true}).selectOption('effort');await page.getByRole('button',{name:'添加属性',exact:true}).click();await page.getByLabel('工作量',{exact:true}).fill('8.5');await page.getByLabel('工作量',{exact:true}).press('Tab');
+  await page.getByLabel('选择自定义属性',{exact:true}).selectOption('platforms');await page.getByRole('button',{name:'添加属性',exact:true}).click();await page.getByRole('button',{name:'添加支持平台项',exact:true}).click();await page.getByLabel('支持平台 第 1 项',{exact:true}).fill('macOS');await page.getByLabel('支持平台 第 1 项',{exact:true}).press('Tab');
+  await page.getByRole('button',{name:'添加支持平台项',exact:true}).click();await page.getByLabel('支持平台 第 2 项',{exact:true}).fill('Windows');await page.getByLabel('支持平台 第 2 项',{exact:true}).press('Tab');
+  await page.getByLabel('选择自定义属性',{exact:true}).selectOption('note');await page.getByRole('button',{name:'添加属性',exact:true}).click();await page.getByLabel('说明',{exact:true}).fill('通过表单填写');await page.getByLabel('说明',{exact:true}).press('Tab');
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  await page.screenshot({path:info.outputPath('attribute-values.png')});
+  await page.locator('.file-list button[title="modules/welcome.md"]').click();await page.getByRole('button',{name:'新建条目',exact:true}).click();
+  const generated=await page.getByLabel('可读编号',{exact:true}).inputValue();expect(generated).toMatch(/^REQ-\d+$/);expect(generated).not.toBe('REQ-001');
+  await page.getByLabel('条目类型',{exact:true}).selectOption('产品需求');await page.getByLabel('条目标题',{exact:true}).fill('第二个产品条目');await page.getByLabel('条目标题',{exact:true}).press('Tab');await page.getByRole('button',{name:'保存',exact:true}).click();
+  await page.getByLabel('关联目标搜索',{exact:true}).fill('产品标题');await expect(page.getByLabel('关联目标',{exact:true}).locator('option')).toHaveCount(2);await expect(page.getByLabel('关联目标',{exact:true})).toContainText('跨模块产品标题匹配');
+  await page.getByRole('button',{name:'条目表格',exact:true}).click();await page.getByLabel('搜索需求',{exact:true}).fill('产品标题');await expect(page.locator('.requirements-table tbody tr')).toHaveCount(1);await expect(page.locator('.table-title')).toHaveText('跨模块产品标题匹配');
+  const before=await page.evaluate(()=>window.reqtype.refresh());
+  await page.getByRole('button',{name:'项目设置',exact:true}).click();await expect(page.getByRole('button',{name:'删除类型 产品需求',exact:true})).toBeDisabled();
+  await page.getByLabel('迁移原类型',{exact:true}).selectOption('产品需求');await page.getByLabel('迁移目标类型',{exact:true}).selectOption('Story');await page.getByRole('button',{name:'预览类型迁移',exact:true}).click();
+  await expect(page.getByLabel('类型迁移预览',{exact:true})).toContainText('2 个条目');await page.getByRole('button',{name:'迁移全部 2 个条目',exact:true}).click();await expect(page.getByRole('status')).toContainText('迁移为 Story');
+  const after=await page.evaluate(()=>window.reqtype.refresh());
+  for(const file of before.files)expect(after.files.find(next=>next.path===file.path)!.content).toBe(file.content.replaceAll('type: "产品需求"','type: "Story"'));
+  const migrated=after.files.flatMap(file=>parseDocumentSource(file.path,file.content).requirements).find(req=>req.meta.key==='SYS-001')!;
+  expect(migrated.title).toBe('跨模块产品标题匹配');expect(migrated.meta.attributes).toMatchObject({effort:8.5,platforms:['macOS','Windows'],note:'通过表单填写'});
+  await expect(page.getByRole('button',{name:'删除类型 产品需求',exact:true})).toBeEnabled();await page.getByRole('button',{name:'删除类型 产品需求',exact:true}).click();await page.getByRole('button',{name:'保存项目设置',exact:true}).click();await expect(page.getByRole('status')).toContainText('项目设置已保存');
+  await closeApp();await launch(true);await page.getByRole('button',{name:'条目表格',exact:true}).click();await page.getByLabel('搜索需求',{exact:true}).fill('产品标题');await expect(page.locator('.requirements-table tbody tr')).toHaveCount(1);await expect(page.locator('.table-title')).toHaveText('跨模块产品标题匹配');
+  await page.getByRole('button',{name:'项目设置',exact:true}).click();await page.getByRole('heading',{name:'条目类型与套餐',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:info.outputPath('project-types.png')});
+});
+
+test('旧项目显式升级 v2 启用类型属性，原文备份可恢复为 v1',async()=>{
+  const settings=await page.evaluate(()=>window.reqtype.projectSettings()),legacy={...settings.config,version:1};delete legacy.typeAttributes;
+  const {stringify}=await import('yaml'),source=stringify(legacy),configFile=path.join(root,'.reqtype/project.yaml');await fs.writeFile(configFile,source);
+  const files=(await page.evaluate(()=>window.reqtype.refresh())).files;
+  await page.getByRole('button',{name:'项目设置',exact:true}).click();await page.getByRole('button',{name:'重新载入设置',exact:true}).click();
+  await expect(page.locator('.settings-card').filter({has:page.getByRole('heading',{name:'自定义属性定义',exact:true})})).toContainText('当前项目格式 v1');
+  await page.getByRole('button',{name:'检查数据格式',exact:true}).click();await expect(page.getByRole('button',{name:'升级所列 1 个文件',exact:true})).toBeEnabled();expect(await fs.readFile(configFile,'utf8')).toBe(source);
+  await page.getByRole('button',{name:'升级所列 1 个文件',exact:true}).click();await expect(page.getByRole('status')).toContainText('格式升级完成');
+  const upgraded=await page.evaluate(()=>window.reqtype.projectSettings());expect(upgraded.config.version).toBe(2);expect(upgraded.config.id).toBe(settings.config.id);for(const type of upgraded.config.types)expect(upgraded.config.typeAttributes![type]).toEqual(['owner']);
+  await expect(page.getByLabel('新属性标识',{exact:true})).toBeVisible();await page.getByRole('button',{name:'恢复此备份',exact:true}).click();await expect(page.getByRole('status')).toContainText('已恢复迁移前文件');expect(await fs.readFile(configFile,'utf8')).toBe(source);
+  for(const file of files)expect(await fs.readFile(path.join(root,file.path),'utf8')).toBe(file.content);
 });

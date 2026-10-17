@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { Workspace, atomicWrite, decode, exists, readOptional, safePath } from './workspace';
 import { applyImport, decodeExchange, exportWorkspace, prepareImport } from './exchange';
 import { commitFiles, gitDiff, gitShow, gitState, initGit } from './git';
+import { previewTypeMigration, applyTypeMigration } from './item-types';
 import { applyMigrations, migrationBackups, previewMigrations, restoreMigration } from './migrations';
 import { PluginManager } from './plugins';
 import { renderPlantuml } from './plantuml';
@@ -69,6 +70,8 @@ function registerIPC() {
     return prepareImport(ws, file, incoming);
   });
   handle('applyImport', (token: string, selected: string[]) => applyImport(current(), token, selected), true);
+  handle('previewTypeMigration', (from: string,to: string) => previewTypeMigration(current(),from,to));
+  handle('applyTypeMigration', (token: string) => applyTypeMigration(current(),token),true);
   handle('previewMigrations', () => previewMigrations(current()));
   handle('applyMigrations', (token: string) => applyMigrations(current(), token), true);
   handle('restoreMigration', (id: string) => restoreMigration(current(), id), true);

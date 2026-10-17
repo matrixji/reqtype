@@ -28,6 +28,7 @@ class RequirementHeader extends WidgetType {
     const wrapper = document.createElement('div'); wrapper.className = 'requirement-widget';
     const dom = document.createElement('div'); dom.className = 'requirement-marker'; dom.dataset.requirement = this.req.meta.id; wrapper.append(dom);
     for (const [className, text] of [['requirement-key', this.req.meta.key || this.req.meta.id.slice(0, 8)], ['requirement-type', typeLabels[this.req.meta.type ?? 'requirement'] ?? this.req.meta.type ?? ''], [`status-dot ${this.req.meta.status ?? 'draft'}`, statusLabels[this.req.meta.status ?? 'draft'] ?? this.req.meta.status ?? '']]) { const span = document.createElement('span'); span.className = className; span.textContent = text; dom.append(span); }
+    if(this.req.meta.title?.trim()) {const title=document.createElement('span');title.className='requirement-title';title.textContent=this.req.meta.title;dom.append(title);}
     dom.addEventListener('mousedown', event => { event.preventDefault(); view.dispatch({ selection: { anchor: Math.min(this.req.bodyFrom + 2, this.req.bodyTo) }, scrollIntoView: true }); view.focus(); });
     return wrapper;
   }

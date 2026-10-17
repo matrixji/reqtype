@@ -48,6 +48,9 @@
         ],
         "additionalProperties": true
       }
+    },
+    "title": {
+      "type": "string"
     }
   },
   "required": [

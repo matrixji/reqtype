@@ -452,3 +452,83 @@ links:
 软件应支持逐版本前向迁移、只读检查和原文预览。执行计划绑定项目、清单与文件哈希，十分钟过期；存在未保存内容、未知或损坏格式时禁止界面迁移。首写前保存完整原文及校验值，再使用可恢复文件事务；恢复不得覆盖后续编辑，重复执行无额外修改。不得重新分配 UUID、编号或关联。
 
 <!-- /req -->
+
+<!-- req
+id: b466ed76-4bf9-48ca-91d8-6234bd2959d7
+key: REQTYPE-002
+title: 项目自动编号与保护
+type: requirement
+status: draft
+priority: high
+tags:
+  - v0.2.0
+links:
+  - type: satisfies
+    target: a4c21dcc-5ceb-4d96-827e-bf70b086527c
+-->
+
+### 项目自动编号与保护
+
+新建和复制条目应使用项目配置的前缀和数字自动编号，在条目界面只读。保存和导入应阻止项目内重复及修改已有编号。项目前缀变更保留历史编号，稳定 UUID 不变。
+
+<!-- /req -->
+
+<!-- req
+id: 1e53c58e-87e8-4420-946c-468c6222f4a0
+key: REQTYPE-003
+title: 可配置类型与批量迁移
+type: requirement
+status: draft
+priority: high
+tags:
+  - v0.2.0
+links:
+  - type: satisfies
+    target: a4c21dcc-5ceb-4d96-827e-bf70b086527c
+-->
+
+### 可配置类型与批量迁移
+
+项目应支持自定义条目类型以及离线 Jira／ASPICE 参考套餐。在用类型不可删除；允许预览并将全项目某类条目迁移为另一类型，仅改类型，保留身份、编号、标题、属性、正文与关联，失败可回滚。
+
+<!-- /req -->
+
+<!-- req
+id: 2b1642b4-7e99-4b67-9a21-4bb8dc84f764
+key: REQTYPE-004
+title: 按类型属性定义与表单
+type: requirement
+status: draft
+priority: high
+tags:
+  - v0.2.0
+links:
+  - type: satisfies
+    target: a4c21dcc-5ceb-4d96-827e-bf70b086527c
+-->
+
+### 按类型属性定义与表单
+
+项目应通过 UI 定义文本、有限数值和文本／数值数组属性，并配置每种条目类型可用的定义；条目可快速选择并填写。保留高级 JSON、布尔值与枚举兼容，在用定义及绑定受到删除保护。
+
+<!-- /req -->
+
+<!-- req
+id: c4c96618-f764-419d-96c0-86e9506e2f8d
+key: REQTYPE-005
+title: 独立标题与片段检索
+type: requirement
+status: draft
+priority: high
+tags:
+  - v0.2.0
+links:
+  - type: satisfies
+    target: a4c21dcc-5ceb-4d96-827e-bf70b086527c
+-->
+
+### 独立标题与片段检索
+
+每个条目应支持元数据 title 独立标题；没有显式标题时从正文提取。表格和关联候选支持编号／标题片段匹配，CSV 导出包含标题，修改标题不重写正文。
+
+<!-- /req -->

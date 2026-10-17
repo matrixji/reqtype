@@ -123,10 +123,12 @@ export async function applyImport(workspace: Workspace, token: string, selected:
   const configEntry = entries.find(x => x.path === '.reqtype/project.yaml');
   const config = configEntry ? parseConfig(decode(configEntry.bytes)) : current.config;
   if (current.configured || configEntry) for (const entry of entries) if (entry.path !== '.reqtype/project.yaml' && ![...config.documents, ...config.assets].some(root => entry.path === root || entry.path.startsWith(root + '/'))) throw new Error(`${entry.path} 不在导入后的目录配置中，请同时选择相应项目配置`);
+  const originals = new Map(indexWorkspace(current.files,current.config).requirements.map(req=>[req.meta.id,req.meta.key]));
   const candidate = new Map(current.files.map(file => [file.path, file.content]));
   for (const entry of entries) if (/\.md$/i.test(entry.path)) candidate.set(entry.path, decode(entry.bytes));
   const errors = indexWorkspace([...candidate].map(([path, content]) => ({ path, content })), config).diagnostics.filter(x => x.severity === 'error');
   if (errors.length) throw new Error(`导入会产生错误：${errors[0].path}：${errors[0].message}`);
+  for (const req of indexWorkspace([...candidate].map(([path,content])=>({path,content})),config).requirements) if (originals.get(req.meta.id) && originals.get(req.meta.id)!==req.meta.key) throw new Error('导入不能修改已有条目的可读编号');
   for (const entry of entries) if (/\.md$/i.test(entry.path)) { const previous = await readOptional(await safePath(workspace.root, entry.path)); if (previous) assertModuleWritable(decode(previous)); assertModuleWritable(decode(entry.bytes)); }
   await applyTransaction(workspace.root, entries.filter(entry => entry.expected !== digest(entry.bytes)));
   plans.delete(token);

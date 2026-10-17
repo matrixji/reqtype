@@ -13,10 +13,10 @@ const fixture = (file: string) => fs.readFile(`tests/fixtures/formats/${file}`,'
 test('FMT-001：格式域独立，严格拒绝非法版本与未来版本', async () => {
   for (const kind of Object.keys(FORMATS) as (keyof typeof FORMATS)[]) {
     assert.doesNotThrow(()=>assertFormatVersion(kind,1));
-    for (const value of [undefined,null,'1',0,-1,1.5,2,Number.NaN]) assert.throws(()=>assertFormatVersion(kind,value),/格式版本/);
+    for (const value of [undefined,null,'1',0,-1,1.5,FORMATS[kind].current+1,Number.NaN]) assert.throws(()=>assertFormatVersion(kind,value),/格式版本/);
   }
   assert.throws(()=>parseConfig('version: "1"\nname: Wrong'),/格式版本/);
-  assert.throws(()=>parseConfig('version: 2\nname: Future'),/项目配置格式版本/);
+  assert.throws(()=>parseConfig('version: 3\nname: Future'),/项目配置格式版本/);
   const old=parseConfig(await fixture('v1/project.yaml')); assert.equal(old.requirement.prefix,defaultConfig().requirement.prefix);
   assert.equal(old.id,undefined); assert.equal((old as any)['x-project'].preserve,true);
 });

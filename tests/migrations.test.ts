@@ -8,7 +8,7 @@ import { Workspace, digest, readJournalDocument } from '../src/main/workspace';
 import { applyImport, decodeExchange, exportWorkspace, prepareImport } from '../src/main/exchange';
 import { applyMigrations, migrationBackups, previewMigrations, restoreMigration } from '../src/main/migrations';
 const fixture = (file:string) => fs.readFile(`tests/fixtures/formats/${file}`);
-const changedPaths=['modules/legacy.md','.reqtype/local/renderers.json','.reqtype/local/transactions/old.json'];
+const changedPaths=['.reqtype/project.yaml','modules/legacy.md','.reqtype/local/renderers.json','.reqtype/local/transactions/old.json'];
 async function setup(t:TestContext) {
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'reqtype-migrations-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
   for(const dir of ['modules','assets','.reqtype/local/transactions']) await fs.mkdir(path.join(root,dir),{recursive:true});
@@ -23,7 +23,7 @@ async function unchanged(root:string,originals:Record<string,Buffer>) {for(const
 
 test('MIG-001：预览只读，列出真实 v0 → v1，普通 Markdown 不被身份化',async t=>{
   const {root,workspace,originals}=await setup(t);await fs.writeFile(path.join(root,'modules/plain.md'),'---\nauthor: Someone\n---\n\n# 普通文档\n');
-  const preview=await previewMigrations(workspace);assert.equal(preview.entries.filter(row=>row.status==='pending').length,3);
+  const preview=await previewMigrations(workspace);assert.equal(preview.entries.filter(row=>row.status==='pending').length,4);
   assert.equal(preview.entries.find(row=>row.path==='modules/plain.md')?.status,'unmanaged');
   await unchanged(root,originals);assert.deepEqual(await migrationBackups(workspace),[]);
   assert.equal((await fs.readdir(path.join(root,'.reqtype/local/transactions'))).length,1);
@@ -34,7 +34,7 @@ test('MIG-002：首写前已有完整备份，升级保留附件，恢复精确�
   const preview=await previewMigrations(workspace);
   const result=await applyMigrations(workspace,preview.token,async index=>{if(index===0){const backups=await migrationBackups(workspace);assert.equal(backups.length,1);const raw=JSON.parse(await fs.readFile(path.join(root,'.reqtype/local/migrations',backups[0].id+'.json'),'utf8'));for(const entry of raw.entries)assert.deepEqual(Buffer.from(entry.before,'base64'),originals[entry.path]);}});
   assert.ok(result.backupId);assert.deepEqual(await fs.readFile(path.join(root,'modules/legacy.md')),await fixture('v1/module.md'));
-  assert.deepEqual(await fs.readFile(path.join(root,'assets/pixel.png')),asset);assert.deepEqual(await fs.readFile(path.join(root,'.reqtype/project.yaml')),config);
+  assert.deepEqual(await fs.readFile(path.join(root,'assets/pixel.png')),asset);assert.equal((await workspace.config()).config.version,2);
   const again=await previewMigrations(workspace);assert.equal(again.entries.filter(row=>row.status==='pending').length,0);
   assert.equal((await applyMigrations(workspace,again.token)).backupId,null);
   await restoreMigration(workspace,result.backupId!);await unchanged(root,originals);
@@ -54,7 +54,7 @@ test('MIG-003：未来模块／设置／日志会阻止整批迁移，不触碰�
 });
 
 test('MIG-004：未来项目配置和损坏数据不被当作旧版迁移',async t=>{
-  const {root,workspace}=await setup(t);await fs.writeFile(path.join(root,'.reqtype/project.yaml'),await fixture('future/project.yaml'));
+  const {root,workspace}=await setup(t);await fs.writeFile(path.join(root,'.reqtype/project.yaml'),await fixture('future-v3/project.yaml'));
   const preview=await previewMigrations(workspace);assert.equal(preview.entries.find(row=>row.kind==='project')?.status,'blocked');
   await assert.rejects(applyMigrations(workspace,preview.token),/不支持或损坏/);
   await fs.writeFile(path.join(root,'.reqtype/project.yaml'),await fixture('v1/project.yaml'));
@@ -90,7 +90,7 @@ test('MIG-007：恢复不覆盖迁移后的人工修改；备份篡改／未来�
   const backupFile=path.join(root,'.reqtype/local/migrations',result.backupId!+'.json'), original=await fs.readFile(backupFile,'utf8'), backup=JSON.parse(original);
   backup.entries[0].before=Buffer.from('tampered').toString('base64');await fs.writeFile(backupFile,JSON.stringify(backup));
   await assert.rejects(restoreMigration(workspace,result.backupId!),/内容校验失败/);
-  const futureEntry=JSON.parse(original);futureEntry.entries[0].to=2;await fs.writeFile(backupFile,JSON.stringify(futureEntry));
+  const futureEntry=JSON.parse(original);futureEntry.entries[0].to=3;await fs.writeFile(backupFile,JSON.stringify(futureEntry));
   await assert.rejects(restoreMigration(workspace,result.backupId!),/不支持的数据版本/);
   const future=JSON.parse(original);future.version=2;await fs.writeFile(backupFile,JSON.stringify(future));
   await assert.rejects(restoreMigration(workspace,result.backupId!),/备份格式版本 2/);
