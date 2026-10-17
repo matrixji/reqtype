@@ -306,6 +306,7 @@ test('离线 Markdown：代码、架构图、公式、任务、脚注、提示�
   // CodeMirror 按视口挂载内容；小窗口下，章末图片尚未进入渲染范围。
   await page.locator('.cm-scroller').evaluate(scroller => scroller.scrollTo({ top: scroller.scrollHeight }));
   await expect(page.locator('.offline-resource')).toContainText('网络图片未加载');
+  await page.locator('.offline-resource').scrollIntoViewIfNeeded();
   await expect(page.locator('.offline-resource')).toBeInViewport();
   expect(await app.evaluate(()=>(globalThis as any).remoteRequests)).toEqual([]);
   await section('代码示例');

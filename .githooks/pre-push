@@ -1,5 +1,5 @@
 #!/bin/sh
-# Local guard for the PR-only main workflow; GitHub Pro is needed for server enforcement.
+# Local guard for the PR-only main workflow, alongside GitHub branch protection.
 while read -r local_ref local_oid remote_ref remote_oid
 do
   if [ "$remote_ref" = refs/heads/main ]; then

@@ -93,5 +93,6 @@ npm run data -- check /path/to/project
 | DELIVERY-004 | CI 汇总三个原生环境；发布仅由 tag push 触发，写权限仅提供给发布 job，Actions 固定提交 |
 | DELIVERY-005 | PR／手动分支事件不能调用脚本发布 Release |
 | DELIVERY-006 | 真实本地裸仓库 dry-run 验证钩子拒绝 main、允许工作分支，不访问 GitHub |
+| 发行包许可 | `scripts/test-packaged.mts` 在原生发行包的真实 app.asar 中逐字核对 LICENSE／NOTICE、Apache-2.0 元数据与非空第三方许可，再运行桌面用例 |
 
 入口：[交付回归](../tests/delivery.test.ts)。三平台原生开发版和发行包均运行上述九项桌面流程。离线文档在 1050×684 视口验证，滚动后断言章末远程图片占位确实出现在视口且未联网；剪贴板按系统换行规范化比较，文档落盘仍逐字校验。执行记录与流程见[开发与发布](delivery.md)。

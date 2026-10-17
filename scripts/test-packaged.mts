@@ -1,9 +1,16 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { accessSync } from 'node:fs';
+import { accessSync, readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+import { extractFile } from '@electron/asar';
 const root=path.resolve(process.argv[2]??'release/ci');
 const folder=path.join(root,`ReqType-${process.platform}-${process.arch}`);
 const executable=process.platform==='darwin'?path.join(folder,'ReqType.app/Contents/MacOS/ReqType'):path.join(folder,'ReqType.exe');
 accessSync(executable);
+const archive=process.platform==='darwin'?path.join(folder,'ReqType.app/Contents/Resources/app.asar'):path.join(folder,'resources/app.asar');
+for(const file of ['LICENSE','NOTICE'])assert.deepEqual(extractFile(archive,file),readFileSync(file),`发行包缺失或改写 ${file}`);
+assert.equal(JSON.parse(extractFile(archive,'package.json').toString()).license,'Apache-2.0');
+assert.ok(extractFile(archive,'dist/THIRD_PARTY_NOTICES.txt').length>0,'发行包缺少第三方许可');
+console.log('Packaged Apache-2.0 LICENSE, NOTICE and third-party notices verified');
 const result=spawnSync(process.execPath,['node_modules/@playwright/test/cli.js','test','--output=test-results/packaged'],{stdio:'inherit',env:{...process.env,REQTYPE_E2E_EXECUTABLE:executable}});
 if(result.error)throw result.error;process.exit(result.status??1);

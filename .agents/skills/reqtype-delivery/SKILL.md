@@ -7,7 +7,7 @@ description: 修改 ReqType 的 GitHub Actions、PR 门禁或 tag 发行，排�
 
 输入是本仓库交付变更、PR／run 链接或拟发布版本。先读 [交付约定](../../../docs/delivery.md) 与实际工作流、`scripts/*release*.mts`、`tests/delivery.test.ts`；涉及 MAS 时再读 [上架准备](../../../docs/mac-app-store.md)。
 
-- 保持用户选择的私有仓库。私有 Free 套餐可能拒绝服务端保护；以 API 的实际返回为准，不能通过公开仓库绕过限制。`npm run setup:git` 仅保护本机，`npm run github:protect` 成功后仍核对远端规则。
+- 保持用户指定的可见性和开源协议；本项目已选择公开、Apache-2.0。可见性调整需要用户授权，不能为绕过套餐限制自行公开仓库。`npm run setup:git` 仅保护本机，`npm run github:protect` 成功后仍核对远端规则；发行包保留项目及第三方许可。
 - 后续变更使用工作分支及 PR，全部 `CI required` 通过后 squash 合并。保留用户未提交文件；不要用 `git add .` 混入需求文档。
 - 三个原生环境都需执行核心检查、开发版桌面回归、原生打包、发行包桌面回归；交叉打包不能替代运行证据。桌面测试只使用临时数据及独立 userData。
 - 定位 CI 时先看失败 step。已完成 job 可用 `gh api repos/<owner>/<repo>/actions/jobs/<job-id>/logs` 获取日志，无需等待整个矩阵结束；下载对应 `evidence-<prefix>-<platform>-<arch>`，检查截图、错误上下文及 trace。不要只提高超时或跳过失败平台。

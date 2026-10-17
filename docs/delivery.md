@@ -1,6 +1,6 @@
 # 开发与发布流程
 
-仓库：[matrixji/reqtype](https://github.com/matrixji/reqtype)，私有，默认分支 `main`。GitHub 中的 Pull Request 对应本项目所说的 MR。
+仓库：[matrixji/reqtype](https://github.com/matrixji/reqtype)，公开，使用 Apache-2.0，默认分支 `main`。GitHub 中的 Pull Request 对应本项目所说的 MR。
 
 ## 分支与合并
 
@@ -19,9 +19,9 @@ gh pr merge --squash --delete-branch
 
 仓库只允许 squash 合并，合并后自动删除远程工作分支。当前为单人维护，流程不要求作者无法提供的自我审批。
 
-2026-10-17 实测 GitHub 对私有仓库设置主分支保护返回 HTTP 403，要求升级 GitHub Pro 或公开仓库。按用户选择保持私有、暂不升级，因此目前 **PR／检查通过是执行约定，GitHub 尚未强制禁止绕过**。计划限制见 [GitHub 官方说明](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets)。
+服务端保护要求 PR、分支已更新、`CI required` 成功、讨论解决与线性历史，约束管理员并禁止 main 强推／删除。单人维护时允许 0 个审批，避免要求作者自我审批。另设 `v*` tag 更新／删除禁令，允许创建新版本 tag。公开仓库的规则可用性见 [GitHub 官方说明](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets)。
 
-将来升级支持此能力的套餐后，以管理员身份执行 `npm run github:protect`。脚本读取 GitHub Actions 的 `CI required` App ID，要求分支最新且检查通过、必须 PR、允许 0 个审批、解决讨论、线性历史，约束管理员并拒绝强推／删除；另设 `v*` tag 更新／删除禁令。脚本失败会明确报错，不会改为公开仓库。保护规则需要先有一次 CI 检查记录；执行后应通过 API 确认两项规则实际存在。
+维护规则时，以管理员身份执行 `npm run github:protect`。脚本读取 GitHub Actions 的 `CI required` App ID，配置上述主分支及 tag 规则。保护规则需要先有一次 CI 检查记录；执行后通过 API 确认两项规则实际存在。脚本失败会明确报错，不更改仓库可见性。
 
 ## 检查范围
 
@@ -59,4 +59,6 @@ ZIP 为解压运行的桌面预览包，尚未进行 Apple 公证或 Windows 签
 
 手动运行 `Release` 工作流用于构建演练，永不创建 Release。版本校验失败先修正版本／合并；不要移动已有 tag。桌面构建失败时，在尚未创建 Release 的前提下可重跑失败 job。发布脚本拒绝覆盖已存在的 Release；若发布过程中留下部分资产，应人工核对后处理，不能用移动 tag 修补已发行内容。后续修复使用新版本。
 
-GitHub 私有仓库的 Actions 额度和计费按账号套餐计算；本工作流不自动开通收费功能，也不定时运行。
+`LICENSE` 与 `NOTICE` 随应用放入 `app.asar`；第三方声明为其中的 `dist/THIRD_PARTY_NOTICES.txt`，Electron 与 PlantUML 的许可另随原资源保留。仓库中的 `private: true` 只控制 npm 发布。
+
+工作流使用 GitHub 标准托管 runner，不自动开通收费功能，也不定时运行。

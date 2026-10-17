@@ -68,7 +68,7 @@
 - 修改源区间、文件保存或 Git 时运行对应核心检查；修改编辑器、IPC 或界面操作时运行桌面流程。
 - CodeMirror 块组件不得设置垂直 margin；使用外层 padding，动态图片加载后调用 `requestMeasure()`。组件复用必须考虑位置变化，重建编辑器要重新绑定监听器并保留撤销状态。
 - macOS 上通过的构建和桌面测试不证明 Windows 运行通过；验证记录需区分本机运行、交叉打包与真实 Windows 执行。
-- GitHub 仓库保持私有。后续修改走工作分支及 PR，全部 `CI required` 检查通过后 squash 合并；禁止直接推送 `main`。本机执行 `npm run setup:git`，但不得将本机钩子描述为服务端强制保护。
+- GitHub 仓库公开，项目使用 Apache-2.0；保持 `LICENSE`、`NOTICE` 和发行包第三方许可。后续修改走工作分支及 PR，全部 `CI required` 检查通过后 squash 合并；禁止直接推送 `main`。本机执行 `npm run setup:git`，服务端保护由 `npm run github:protect` 配置并通过 API 核验。
 - tag `v<package.json 版本>` 只标记已合入 `main` 的提交，成功后创建 Release；应用版本与数据格式分别管理，不为发布流水线修改项目格式。不得重写已发行 tag 或替换发行资产。
 - Mac App Store 使用独立 MAS 构建、App Sandbox 和签名；普通 darwin ZIP 通过不等于可上架，证书／描述文件不得入库。
 
