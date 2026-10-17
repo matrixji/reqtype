@@ -277,7 +277,12 @@ test('离线 Markdown：代码、架构图、公式、任务、脚注、提示�
   await expect(page.locator('.code-block[data-language=mermaid] .diagram-preview svg')).toContainText('Client');
   await expect(page.locator('.code-block[data-language=mermaid] .diagram-preview svg')).toContainText('Core');
   await section('PlantUML');
-  await expect(page.locator('.code-block[data-language=plantuml] .diagram-preview svg')).toBeVisible();
+  const plantuml = page.locator('.code-block[data-language=plantuml] .diagram-preview svg');
+  // 本地 JAR 的后端截止时间为 20 秒；另留 5 秒给 IPC 与视图测量。
+  await expect(plantuml).toBeVisible({ timeout: 25000 });
+  await expect(plantuml).toContainText('Client');
+  await expect(plantuml).toContainText('Core');
+  await expect(plantuml).toContainText('local');
   await section('待办');
   await page.getByRole('checkbox',{name:'切换任务 1',exact:true}).check();
   await page.getByRole('button',{name:'保存',exact:true}).click();

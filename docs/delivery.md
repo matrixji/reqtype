@@ -35,7 +35,7 @@ gh pr merge --squash --delete-branch
 
 每个环境使用 Node.js 24、Java 21 和锁定依赖，执行 `npm test`、类型检查／构建、真实 Electron 开发版桌面回归、原生打包，再运行同一套发行包桌面回归。最终 `CI required` 汇总全部环境；任一失败即失败，不跳过失败平台。
 
-桌面回归使用临时工作区和独立 userData，不修改仓库需求。离线用例取消所有 HTTP(S) 并验证没有发出请求，覆盖 Mermaid、PlantUML JAR、公式、代码及本地插件。Windows 剪贴板按 CRLF 规范化后比较文本，保存原文仍逐字校验。CodeMirror 测试应先将目标滚入视口，不能假定长文档全部挂载。
+桌面回归使用临时工作区和独立 userData，不修改仓库需求。离线用例取消所有 HTTP(S) 并验证没有发出请求，覆盖 Mermaid、PlantUML JAR、公式、代码及本地插件。Windows 剪贴板按 CRLF 规范化后比较文本，保存原文仍逐字校验。CodeMirror 测试应先将目标滚入视口，不能假定长文档全部挂载。PlantUML 断言按 JAR 的 20 秒后端截止时间另加 5 秒界面余量等待，并检查图中标签；不使用通用 5 秒断言作为 JAR 启动上限。
 
 失败保留截图、上下文和 trace；成功上传未签名 ZIP。Actions 构建及验证产物保留 7 天。所有第三方 Actions 固定到提交 SHA；PR 作业仅有读取权限、不使用发布凭据，只有发布 job 获得 `contents: write`。
 
