@@ -1,0 +1,21 @@
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { releaseManifest,validateTag } from './release-utils.mts';
+import { deploySite,siteManifest,siteOrigin } from './site-release.mts';
+
+if(process.env.GITHUB_EVENT_NAME!=='push'||process.env.GITHUB_REF_TYPE!=='tag')throw new Error('只允许版本 tag push 部署官网');
+const pkg=JSON.parse(await fs.readFile('package.json','utf8')),tag=validateTag(process.env.GITHUB_REF_NAME??'',pkg.version);
+const directory=path.resolve(process.argv[2]??'artifacts'),origin=process.env.REQTYPE_SITE_URL??'',token=process.env.REQTYPE_SITE_TOKEN??'';
+siteOrigin(origin);if(token.length<32)throw new Error('请配置 REQTYPE_SITE_TOKEN secret');
+const local=await releaseManifest(directory,pkg.version),published=JSON.parse(await fs.readFile(path.join(directory,'manifest.json'),'utf8'));
+assert.deepEqual({version:published.version,files:published.files},local,'GitHub 发行清单与下载文件哈希不一致');
+assert.equal(published.commit,process.env.GITHUB_SHA,'发行清单不属于当前 tag 提交');
+assert.equal(await fs.readFile(path.join(directory,'SHA256SUMS.txt'),'utf8'),local.files.map(file=>`${file.sha256}  ${file.name}`).join('\n')+'\n','GitHub 校验文件与发行包不一致');
+const repository=process.env.GH_REPO??'';if(!/^[\w.-]+\/[\w.-]+$/.test(repository))throw new Error('GH_REPO 无效');
+const release=JSON.parse(execFileSync('gh',['api',`repos/${repository}/releases/tags/${tag}`],{encoding:'utf8'}));
+const manifest=siteManifest(release,pkg.version,local.files);
+const result=await deploySite({origin,token,directory,manifest});
+console.log(JSON.stringify({tag,url:origin,channel:manifest.channel,...result}));
+if(process.env.GITHUB_STEP_SUMMARY)await fs.appendFile(process.env.GITHUB_STEP_SUMMARY,`已验证官网 ${origin} 的 ${tag}，描述来自 GitHub Release Notes，三个文件哈希一致。\n`);

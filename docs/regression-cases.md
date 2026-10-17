@@ -95,5 +95,10 @@ npm run data -- check /path/to/project
 | DELIVERY-005 | PR／手动分支事件不能调用脚本发布 Release |
 | DELIVERY-006 | 真实本地裸仓库 dry-run 验证钩子拒绝 main、允许工作分支，不访问 GitHub |
 | 发行包许可 | `scripts/test-packaged.mts` 在原生发行包的真实 app.asar 中逐字核对 LICENSE／NOTICE、Apache-2.0 元数据与非空第三方许可，再运行桌面用例 |
+| SITE-001 | GitHub Notes 原文、三平台清单与有界摘要，beta 不更新稳定首页；拒绝不兼容版本／URL／说明 |
+| SITE-002 | 真实 HTTP multipart 验证流式上传字节、Content-Length、哈希及官网更新；同版幂等、内容冲突拒绝 |
+| SITE-003 | 服务端已提交但响应断开后只读核对，不重复 POST |
+| SITE-004 | beta 版本与稳定介绍隔离；更高版本阻止回退上传 |
+| SITE-005 | 认证失败、重定向不重试或泄漏 Token；PR 事件不能部署 |
 
 入口：[交付回归](../tests/delivery.test.ts)。三平台原生开发版和发行包均运行上述十项桌面流程。离线文档在 1050×684 视口验证，滚动后断言章末远程图片占位确实出现在视口且未联网；剪贴板按系统换行规范化比较，文档落盘仍逐字校验。执行记录与流程见[开发与发布](delivery.md)。

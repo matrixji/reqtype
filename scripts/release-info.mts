@@ -4,6 +4,7 @@ import { validateVersion, validateTag } from './release-utils.mts';
 const pkg=JSON.parse(readFileSync('package.json','utf8')),lock=JSON.parse(readFileSync('package-lock.json','utf8'));
 const version=validateVersion(pkg.version),tag=process.env.GITHUB_REF_TYPE==='tag'?process.env.GITHUB_REF_NAME!:`v${version}`;
 validateTag(tag,version);
+if(version.includes('+'))throw new Error('官网发行不支持 build 元数据；请使用补丁版本或预发布版本');
 if(lock.version!==version||lock.packages?.['']?.version!==version)throw new Error('package-lock.json 版本不同步');
 execFileSync('git',['merge-base','--is-ancestor','HEAD','refs/remotes/origin/main'],{stdio:'inherit'});
 if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,`tag=${tag}\n`);

@@ -7,6 +7,8 @@ description: 修改 ReqType 的 GitHub Actions、PR 门禁或 tag 发行，排�
 
 输入是本仓库交付变更、PR／run 链接或拟发布版本。先读 [交付约定](../../../docs/delivery.md) 与实际工作流、`scripts/*release*.mts`、`tests/delivery.test.ts`；涉及 MAS 时再读 [上架准备](../../../docs/mac-app-store.md)。
 
+涉及官网上传时读 [官网发布](../../../docs/website-release.md) 与客户端 HTTP 测试；服务器契约以 `reqtype-site` 实现为准。官网同版不可覆写，tag 前先核对官网版本。Notes 使用 GitHub 实际发布正文；GitHub 已发布而官网失败时只重跑 deploy，读取状态后处理，不重建 tag 或覆盖发行资产。Token 仅通过 Secret／环境传递。
+
 - 保持用户指定的可见性和开源协议；本项目已选择公开、Apache-2.0。可见性调整需要用户授权，不能为绕过套餐限制自行公开仓库。`npm run setup:git` 仅保护本机，`npm run github:protect` 成功后仍核对远端规则；发行包保留项目及第三方许可。
 - 后续变更使用工作分支及 PR，全部 `CI required` 通过后 squash 合并。保留用户未提交文件；不要用 `git add .` 混入需求文档。
 - 三个原生环境都需执行核心检查、开发版桌面回归、原生打包、发行包桌面回归；交叉打包不能替代运行证据。用户要求尽量后台测试，优先 CI；本机桌面回归使用隐藏窗口、临时数据及独立 userData，验证窗口不可见且未聚焦。只有明确的前台验收需求才展示窗口。

@@ -42,6 +42,7 @@
 - `docs/data-formats.md` 与 `docs/regression-cases.md`：格式版本契约、迁移规则和回归矩阵。
 - `docs/project-item-model.md`：编号只读、类型套餐与迁移、按类型属性和标题检索。
 - `docs/delivery.md` 与 `docs/mac-app-store.md`：GitHub PR／tag 发行和 App Store 准备边界。
+- `docs/website-release.md`：官网 API、由 Release Notes 生成介绍、凭据与不可变版本的部署规则。
 - `src/core/`：源文本解析、条目与关联；`src/main/`：文件、交换、Git、插件和桌面桥接；`src/renderer/`：React 与编辑器。
 
 ## 后续增强与规模验证
@@ -70,6 +71,7 @@
 - macOS 上通过的构建和桌面测试不证明 Windows 运行通过；验证记录需区分本机运行、交叉打包与真实 Windows 执行。
 - GitHub 仓库公开，项目使用 Apache-2.0；保持 `LICENSE`、`NOTICE` 和发行包第三方许可。后续修改走工作分支及 PR，全部 `CI required` 检查通过后 squash 合并；禁止直接推送 `main`。本机执行 `npm run setup:git`，服务端保护由 `npm run github:protect` 配置并通过 API 核验。
 - tag `v<package.json 版本>` 只标记已合入 `main` 的提交，成功后创建 Release；应用版本与数据格式分别管理，不为发布流水线修改项目格式。不得重写已发行 tag 或替换发行资产。
+- GitHub Release 成功后独立部署官网；标题／日志取最终 Release Notes，稳定首页介绍取摘要。官网不覆盖同版本，重跑前核对状态；Token 只提供给 deploy job，不进入应用或 PR。
 - Mac App Store 使用独立 MAS 构建、App Sandbox 和签名；普通 darwin ZIP 通过不等于可上架，证书／描述文件不得入库。
 
 ## 条目模型约定
