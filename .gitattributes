@@ -9,3 +9,4 @@
 *.cjs text eol=lf
 *.jar binary
 tests/fixtures/formats/** -text whitespace=cr-at-eol
+.githooks/* text eol=lf

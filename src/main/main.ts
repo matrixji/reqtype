@@ -15,6 +15,8 @@ import { exportFileName } from '../core/config';
 import type { PluginSnapshot } from '../shared/types';
 
 if (process.env.REQTYPE_USER_DATA) app.setPath('userData', process.env.REQTYPE_USER_DATA);
+const backgroundTest = process.env.REQTYPE_E2E_BACKGROUND === '1' && Boolean(process.env.REQTYPE_USER_DATA);
+if (backgroundTest && process.platform === 'darwin') app.setActivationPolicy('accessory');
 protocol.registerSchemesAsPrivileged([{ scheme: 'reqasset', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 let window: BrowserWindow;
 let workspace: Workspace | undefined;
@@ -137,7 +139,8 @@ app.whenReady().then(async () => {
   const initial = requested ?? last ?? (await exists(path.join(app.getAppPath(), '.reqtype/project.yaml')) ? app.getAppPath() : undefined);
   let initialError: string | undefined;
   if (initial) try { await selectWorkspace(initial); } catch (cause) { initialError = (cause as Error).message; }
-  window = new BrowserWindow({ width: 1500, height: 960, minWidth: 1050, minHeight: 680, title: 'ReqType', backgroundColor: '#f6f7f9', titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default', trafficLightPosition: { x: 18, y: 17 }, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+  // Windows 隐藏窗口仍可能将动画帧降到约 1 FPS，测试使用离屏绘制维持帧调度。
+  window = new BrowserWindow({ width: 1500, height: 960, minWidth: 1050, minHeight: 680, title: 'ReqType', show: !backgroundTest, skipTaskbar: backgroundTest, backgroundColor: '#f6f7f9', titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default', trafficLightPosition: { x: 18, y: 17 }, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: !backgroundTest, offscreen: backgroundTest && process.platform === 'win32' } });
   registerIPC();
   protocol.handle('reqasset', async request => {
     try {

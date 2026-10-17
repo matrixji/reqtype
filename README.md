@@ -8,12 +8,13 @@
 
 当前为可运行的 v0.2.0 桌面版本，采用 Electron、TypeScript、React 和 CodeMirror 6。本工程已包含自己的需求工作区：打开项目根目录，即可管理 `requirements/` 下的 57 个条目和跨模块关联。
 
-本轮打包应用位于 `release/0.2.0/`，可直接打开 macOS 的 `ReqType.app` 或 Windows 目录内的 `ReqType.exe`，无需安装 Node.js。具体运行证据与平台限制见[本轮验证记录](docs/validation-v0.2.0.md)。
+从 [GitHub Releases](https://github.com/matrixji/reqtype/releases) 下载对应架构的 ZIP，解压后打开 macOS 的 `ReqType.app` 或 Windows 目录内的 `ReqType.exe`，无需安装 Node.js。当前原生检查与发行流程见[开发与发布](docs/delivery.md)，早期本机验证记录保留在 [v0.2.0 验证记录](docs/validation-v0.2.0.md)。
 
 从源码运行需要 Node.js 24 或更新版本，以及用于版本管理的 Git：
 
 ```sh
 npm ci
+npm run setup:git
 npm run dev
 ```
 
@@ -64,6 +65,18 @@ npm run package -- --platform=win32 --arch=x64 --out=release/0.2.0
 
 自动化桌面流程在真实 Electron 中运行；测试数据使用临时目录，不修改工程需求。跨平台构建不等同于目标平台运行验证。发行目录尚未签名／公证。
 
+## GitHub 开发与发行
+
+公开仓库为 [matrixji/reqtype](https://github.com/matrixji/reqtype)。后续变更使用工作分支和 Pull Request，三种原生环境检查通过后 squash 合并。服务端要求 PR、最新分支、`CI required` 检查通过及讨论解决，管理员同样受约束；`v*` tag 不可修改或删除。`npm run setup:git` 额外安装本机禁止直接推送 `main` 的钩子。
+
+推送与应用版本一致的 `v*` tag，流水线会重新运行核心、开发版和发行包桌面测试，再创建包含 macOS ARM／Intel 和 Windows x64 ZIP、清单与 SHA-256 的 GitHub Release。手动运行 Release 工作流只构建验证，不发布。详见[开发与发布流程](docs/delivery.md)。
+
+macOS 上架计划与现有桌面发行分开推进；App Sandbox、工作区授权、插件及外部工具仍需适配，当前流水线不提交 App Store。见[Mac App Store 准备](docs/mac-app-store.md)。
+
+## 开源协议
+
+ReqType 使用 [Apache License 2.0](LICENSE)，版权声明见 [NOTICE](NOTICE)。第三方依赖保留各自协议；构建生成 `dist/THIRD_PARTY_NOTICES.txt`，PlantUML 使用 MIT 版本并保留其许可。`package.json` 的 `private: true` 仅禁止误发 npm 包，不影响代码开源。
+
 ## 文档
 
 - [产品与技术设计](docs/product-design.md)
@@ -77,6 +90,8 @@ npm run package -- --platform=win32 --arch=x64 --out=release/0.2.0
 - [条目模型与使用说明](docs/project-item-model.md)
 - [数据格式版本与迁移](docs/data-formats.md)
 - [回归用例矩阵](docs/regression-cases.md)
+- [开发与发布流程](docs/delivery.md)
+- [Mac App Store 准备](docs/mac-app-store.md)
 - [v0.2.0 验证记录与限制](docs/validation-v0.2.0.md)
 - [v0.1 历史验证记录](docs/validation.md)
 

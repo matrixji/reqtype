@@ -1,0 +1,8 @@
+ReqType
+Copyright 2026 matrixji and ReqType contributors
+
+This project is licensed under the Apache License, Version 2.0.
+
+Third-party components remain under their respective licenses.
+Desktop distributions include dist/THIRD_PARTY_NOTICES.txt in app.asar,
+Electron's license files, and resources/plantuml/LICENSE.txt.

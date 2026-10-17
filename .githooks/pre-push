@@ -1,0 +1,10 @@
+#!/bin/sh
+# Local guard for the PR-only main workflow, alongside GitHub branch protection.
+while read -r local_ref local_oid remote_ref remote_oid
+do
+  if [ "$remote_ref" = refs/heads/main ]; then
+    printf '%s\n' 'ReqType: main 通过 GitHub Pull Request 合并；请推送工作分支并创建 PR。' >&2
+    exit 1
+  fi
+done
+exit 0

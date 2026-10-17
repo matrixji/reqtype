@@ -13,11 +13,13 @@ let pageErrors: string[];
 async function launch(remember = false) {
   const env: Record<string, string> = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
   env.REQTYPE_USER_DATA = userData;
+  env.REQTYPE_E2E_BACKGROUND = '1';
   delete env.ELECTRON_RUN_AS_NODE;
   const executablePath = process.env.REQTYPE_E2E_EXECUTABLE;
   app = await _electron.launch({ executablePath, args: [...executablePath ? [] : ['.'], ...remember ? [] : ['--workspace=' + root]], env });
   if (executablePath) expect(await app.evaluate(({app})=>({packaged:app.isPackaged,version:app.getVersion()}))).toEqual({packaged:true,version:JSON.parse(await fs.readFile('package.json','utf8')).version});
   page = await app.firstWindow();
+  expect(await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows().map(window => ({visible:window.isVisible(),focused:window.isFocused()})))).toEqual([{visible:false,focused:false}]);
   page.on('pageerror', error => pageErrors.push(error.message));
   await expect(page.locator('.workspace-heading h2')).toBeVisible();
 }
@@ -100,6 +102,32 @@ test('界面编辑、属性撤销、关联、新条目与重启保存', async ()
   await page.getByRole('button', { name: '条目表格', exact: true }).click();
   await page.getByRole('textbox', { name: '搜索需求' }).fill('通过桌面界面维护');
   await expect(page.locator('.requirements-table tbody tr')).toHaveCount(1);
+});
+
+test('导航完成前聚焦标题表单，延后定位不得抢走焦点或改写正文', async () => {
+  const file=path.join(root,'modules/local-save.md');
+  const before=parseDocumentSource('modules/local-save.md',await fs.readFile(file,'utf8')).requirements.find(req=>req.meta.key==='SYS-001')!;
+  await page.setViewportSize({width:1050,height:684});
+  await page.getByRole('button',{name:'条目表格',exact:true}).click();
+  // 在导航挂载表单的同一轮 DOM 更新中聚焦，稳定覆盖快速开始编辑的交互。
+  await page.evaluate(() => {
+    const observer=new MutationObserver(() => {
+      const input=document.querySelector<HTMLInputElement>('input[aria-label="条目标题"]');
+      if(input){input.focus();observer.disconnect();}
+    });
+    observer.observe(document.body,{childList:true,subtree:true});
+    const button=[...document.querySelectorAll<HTMLButtonElement>('.table-key')].find(button=>button.textContent?.includes('SYS-001'))!;
+    button.click();
+  });
+  const title=page.getByLabel('条目标题',{exact:true});
+  await expect(title).toBeFocused();
+  await expect(page.locator('.cm-line').filter({hasText:'软件应在离线状态下将需求文档保存到用户选择的本地工作区。'})).toBeInViewport();
+  await expect(title).toBeFocused();
+  await page.keyboard.insertText('焦点保护后的独立标题');await title.press('Tab');
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  await expect.poll(async()=>parseDocumentSource('modules/local-save.md',await fs.readFile(file,'utf8')).requirements.find(req=>req.meta.id===before.meta.id)?.meta.title).toBe('焦点保护后的独立标题');
+  const after=parseDocumentSource('modules/local-save.md',await fs.readFile(file,'utf8')).requirements.find(req=>req.meta.id===before.meta.id)!;
+  expect(after.body).toBe(before.body);expect(after.meta.key).toBe(before.meta.key);
 });
 
 test('外部修改冲突保护与显式保留本地版本', async () => {
@@ -240,6 +268,7 @@ test('项目设置、编号默认值、状态流转与导出偏好可持久化',
 });
 
 test('离线 Markdown：代码、架构图、公式、任务、脚注、提示块和本地插件', async () => {
+  await page.setViewportSize({ width: 1050, height: 684 });
   const body = [
     '[TOC]', '', '## 代码示例', '', '```typescript title="API.ts"', 'export interface Service { name: string }', 'const ready = true;', '```', '',
     '## 公式', '', '返回值 $x^2$。', '', '$$', 'E=mc^2', '$$', '',
@@ -262,7 +291,8 @@ test('离线 Markdown：代码、架构图、公式、任务、脚注、提示�
   await expect(code.locator('.hljs-keyword').first()).toBeVisible();
   await code.getByRole('button',{name:'复制代码块',exact:true}).click();
   await expect(code.getByRole('button',{name:'复制代码块',exact:true})).toHaveText('已复制');
-  await expect.poll(() => app.evaluate(async ({clipboard},expected)=>(await clipboard.readText())===expected, 'export interface Service { name: string }\nconst ready = true;')).toBe(true);
+  // Windows 剪贴板使用 CRLF；比较文本内容，文件原文仍由后续逐字断言验证。
+  await expect.poll(async () => (await app.evaluate(({clipboard}) => clipboard.readText())).replace(/\r\n/g, '\n')).toBe('export interface Service { name: string }\nconst ready = true;');
   await code.getByRole('button',{name:'编辑代码块',exact:true}).click();
   await page.keyboard.insertText('// 本地编辑\n');
   await page.getByRole('button',{name:'保存',exact:true}).click();
@@ -275,7 +305,12 @@ test('离线 Markdown：代码、架构图、公式、任务、脚注、提示�
   await expect(page.locator('.code-block[data-language=mermaid] .diagram-preview svg')).toContainText('Client');
   await expect(page.locator('.code-block[data-language=mermaid] .diagram-preview svg')).toContainText('Core');
   await section('PlantUML');
-  await expect(page.locator('.code-block[data-language=plantuml] .diagram-preview svg')).toBeVisible();
+  const plantuml = page.locator('.code-block[data-language=plantuml] .diagram-preview svg');
+  // 本地 JAR 的后端截止时间为 20 秒；另留 5 秒给 IPC 与视图测量。
+  await expect(plantuml).toBeVisible({ timeout: 25000 });
+  await expect(plantuml).toContainText('Client');
+  await expect(plantuml).toContainText('Core');
+  await expect(plantuml).toContainText('local');
   await section('待办');
   await page.getByRole('checkbox',{name:'切换任务 1',exact:true}).check();
   await page.getByRole('button',{name:'保存',exact:true}).click();
@@ -296,7 +331,11 @@ test('离线 Markdown：代码、架构图、公式、任务、脚注、提示�
   await section('说明');
   await expect(page.locator('.markdown-alert.alert-important')).toContainText('不需要网络');
   await expect(page.locator('.inline-footnote')).toHaveText('[api]');
+  // CodeMirror 按视口挂载内容；小窗口下，章末图片尚未进入渲染范围。
+  await page.locator('.cm-scroller').evaluate(scroller => scroller.scrollTo({ top: scroller.scrollHeight }));
   await expect(page.locator('.offline-resource')).toContainText('网络图片未加载');
+  await page.locator('.offline-resource').scrollIntoViewIfNeeded();
+  await expect(page.locator('.offline-resource')).toBeInViewport();
   expect(await app.evaluate(()=>(globalThis as any).remoteRequests)).toEqual([]);
   await section('代码示例');
   await expect(page.getByRole('navigation',{name:'文档目录'})).toBeVisible();
