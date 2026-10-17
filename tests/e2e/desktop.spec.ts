@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Workspace, digest } from '../../src/main/workspace';
@@ -26,7 +27,7 @@ async function launch(remember = false) {
 async function saveDialog(file: string) { await app.evaluate(({ dialog }, target) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: target }); }, file); }
 async function openDialog(file: string) { await app.evaluate(({ dialog }, target) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] }); }, file); }
 async function selectSample() { await page.locator('.file-list button').filter({ hasText: '本地保存示例' }).click(); }
-async function closeApp() { await page.evaluate(() => window.reqtype.setDirty(false)); await app.close(); }
+async function closeApp() { await page.evaluate(async () => { window.reqtype.setDirty(false); await window.reqtype.initial(); }); await app.close(); }
 
 test.beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'reqtype-e2e-workspace-'));
@@ -46,7 +47,128 @@ test.afterEach(async ({}, info) => {
   expect(pageErrors).toEqual([]);
 });
 
+test('EDITOR-001：源码首字符在行号栏右侧，窄窗口与切换模式保持可见',async()=>{
+ await selectSample();await page.getByRole('button',{name:'源码',exact:true}).click();
+ for(const width of [1500,1050]) {
+  await app.evaluate(({BrowserWindow},w)=>BrowserWindow.getAllWindows()[0].setSize(w,800),width);
+  await page.locator('.cm-scroller').evaluate(el=>el.scrollTo(0,0));
+  await expect.poll(()=>page.locator('.cm-editor').evaluate(el=>{
+   const line=el.querySelector('.cm-line')!,g=el.querySelector('.cm-gutters')!,walker=document.createTreeWalker(line,NodeFilter.SHOW_TEXT),text=walker.nextNode()!,range=document.createRange();range.setStart(text,0);range.setEnd(text,1);
+   return range.getBoundingClientRect().left-g.getBoundingClientRect().right;
+  })).toBeGreaterThanOrEqual(0);
+ }
+ await page.getByRole('button',{name:'实时预览',exact:true}).click();await page.getByRole('button',{name:'源码',exact:true}).click();
+ await expect(page.locator('.cm-line').first()).toHaveText('---');
+});
+
+test('EDITOR-003：Markdown 边界隐藏且受保护，虚线框与浮动 tip 不占正文行，删除可撤销',async()=>{
+ await selectSample();const file=path.join(root,'modules/local-save.md'),original=await fs.readFile(file,'utf8');
+ await page.locator('.requirement-marker[data-requirement="a58cb6b8-4702-4195-a10e-9cfa2397a9c1"]').click();
+ await expect(page.locator('.requirement-region:has(.cm-line), .requirement-region:has(.live-block)')).toHaveCount(3);
+ expect(await page.locator('.requirement-marker').first().evaluate(el=>getComputedStyle(el).position)).toBe('absolute');
+ expect(await page.locator('.requirement-region:has(.cm-line), .requirement-region:has(.live-block)').first().evaluate(el=>getComputedStyle(el).outlineStyle)).toBe('dashed');
+ const content=page.locator('.cm-content');await content.focus();await page.keyboard.press('Backspace');
+ await expect(content).not.toContainText('a58cb6b8-4702-4195-a10e-9cfa2397a9c1');
+ await page.keyboard.insertText('新增说明');await page.getByRole('button',{name:'保存',exact:true}).click();
+ await expect.poll(()=>fs.readFile(file,'utf8')).toBe(original.replace('用户需要在没有网络连接时继续管理需求。','新增说明用户需要在没有网络连接时继续管理需求。'));
+ await page.getByRole('button',{name:'撤销',exact:true}).click();await page.getByRole('button',{name:'保存',exact:true}).click();await expect.poll(()=>fs.readFile(file,'utf8')).toBe(original);
+ await page.getByRole('button',{name:'删除整个条目',exact:true}).click();await expect(page.locator('.requirement-region:has(.cm-line), .requirement-region:has(.live-block)')).toHaveCount(2);
+ await page.getByRole('button',{name:'撤销',exact:true}).click();await expect(page.locator('.requirement-region:has(.cm-line), .requirement-region:has(.live-block)')).toHaveCount(3);
+ await content.focus();await page.keyboard.press('ControlOrMeta+Home');await page.keyboard.insertText('文档开头说明\n\n');await page.getByRole('button',{name:'保存',exact:true}).click();const at=original.indexOf('# 本地保存');await expect.poll(()=>fs.readFile(file,'utf8')).toBe(original.slice(0,at)+'文档开头说明\n\n'+original.slice(at));await page.getByRole('button',{name:'撤销',exact:true}).click();await page.getByRole('button',{name:'保存',exact:true}).click();await expect.poll(()=>fs.readFile(file,'utf8')).toBe(original);
+ await page.getByRole('button',{name:'源码',exact:true}).click();await expect(content).toContainText('a58cb6b8-4702-4195-a10e-9cfa2397a9c1');
+});
+
+test('REF-UI-001：三括号补全、文本和表格引用预览、跨文档跳转与反向引用',async()=>{
+ const target='5e43d568-9e2c-4a9e-a12c-26934b450624',file='modules/references.md';
+ const source=ensureModule(`# 引用模块\n\n输入区\n\n| 引用 |\n| --- |\n| [[[表格链接:req-${target}]]] |\n\n\\[[[字面量:req-${target}]]]\n`,'引用模块',randomUUID());
+ await fs.writeFile(path.join(root,file),source);await page.getByRole('button',{name:'更多操作',exact:true}).click();await page.getByRole('button',{name:'刷新工作区',exact:true}).click();
+ await page.locator('.file-list button').filter({hasText:'引用模块'}).click();
+ await expect(page.locator('a.req-reference')).toHaveText('表格链接');
+ await page.locator('.cm-line').filter({hasText:/^输入区$/}).click();await page.locator('.cm-content').focus();await page.keyboard.press('End');await page.keyboard.insertText(' [[[SYS-001');
+ await expect(page.locator('.cm-tooltip-autocomplete')).toBeVisible();await page.keyboard.press('Enter');
+ await page.getByRole('button',{name:'保存',exact:true}).click();
+ await expect.poll(async()=>parseDocumentSource(file,await fs.readFile(path.join(root,file),'utf8')).references.length).toBe(2);
+ await page.locator('.outline-list button').first().click();
+ await page.locator('span.req-reference[data-req-target="'+target+'"]').click({modifiers:[process.platform==='darwin'?'Meta':'Control']});
+ await expect(page.locator('.document-heading h1')).toHaveText('本地保存示例');await expect(page.locator('.inspector-identity h2')).toHaveText('SYS-001');
+ await expect(page.locator('.text-reference-source')).toHaveCount(2);await page.locator('.text-reference-source').filter({hasText:'表格链接'}).click();await expect(page.locator('.document-heading h1')).toHaveText('引用模块');
+ const label='登录]要求:重试';await page.locator('.cm-content').focus();await page.keyboard.press('ControlOrMeta+End');await page.keyboard.insertText('\n\n'+label);for(let i=0;i<label.length;i++)await page.keyboard.press('Shift+ArrowLeft');
+ await page.getByRole('button',{name:'插入需求引用',exact:true}).click();await expect(page.locator('.cm-tooltip-autocomplete')).toBeVisible();await page.keyboard.insertText('req-'+target);await expect(page.locator('.cm-tooltip-autocomplete [role="option"]')).toHaveCount(1);await page.keyboard.press('Enter');await page.getByRole('button',{name:'保存',exact:true}).click();
+ await expect.poll(async()=>parseDocumentSource(file,await fs.readFile(path.join(root,file),'utf8')).references.at(-1)?.label).toBe(label);
+ await page.locator('.cm-content').focus();await page.keyboard.insertText('\n\\[[[');await expect(page.locator('.cm-tooltip-autocomplete')).toHaveCount(0);
+});
+
+test('AI-UI-001：可选本机服务、润色预览/应用/撤销、草稿身份分配和只读质量建议',async()=>{
+ const requests:any[]=[],server=createServer(async(req,res)=>{
+  let text='';for await(const chunk of req)text+=chunk;const input=JSON.parse(text);requests.push(input);
+  const system=input.messages[0].content,result=system.includes('起草一条需求')?'软件应在离线状态下记录登录失败次数。\n\n验收：三次失败后显示提示。':system.includes('检查需求')?'## 质量建议\n\n- 请补充断网场景的验收条件。':'用户应在离线状态下继续管理需求，并保留本地修改。';
+  res.writeHead(200,{'Content-Type':'text/event-stream'});res.end(`data: ${JSON.stringify({choices:[{delta:{content:result},finish_reason:'stop'}]})}\n\ndata: [DONE]\n\n`);
+ });
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+ try {
+  await selectSample();const file=path.join(root,'modules/local-save.md'),original=await fs.readFile(file,'utf8'),before=parseDocumentSource('modules/local-save.md',original).requirements[0];
+  await page.locator('.requirement-marker[data-requirement="'+before.meta.id+'"]').click();await page.getByRole('button',{name:'AI 辅助',exact:true}).click();const dialog=page.getByRole('dialog',{name:'AI 辅助',exact:true});
+  await expect(dialog.getByLabel('启用 AI',{exact:true})).toBeEnabled();await expect(dialog.getByRole('button',{name:'生成预览',exact:true})).toBeDisabled();
+  await expect(dialog.getByLabel('AI 选中内容',{exact:true})).toHaveText(before.body);
+  await dialog.getByLabel('AI 服务地址',{exact:true}).fill(`http://127.0.0.1:${(server.address() as {port:number}).port}/v1`);await dialog.getByLabel('AI 模型名称',{exact:true}).fill('mock-model');await dialog.getByLabel('启用 AI',{exact:true}).check();
+  await dialog.getByRole('button',{name:'生成预览',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('生成完成，尚未修改文档');
+  await expect(dialog.getByLabel('润色差异',{exact:true})).toContainText('保留本地修改');expect(await fs.readFile(file,'utf8')).toBe(original);
+  expect(JSON.parse(requests[0].messages[1].content).selectedMarkdown).toBe(before.body);expect(JSON.stringify(requests[0])).not.toContain(before.meta.id);
+  await dialog.getByRole('button',{name:'应用润色',exact:true}).click();await expect(dialog).not.toBeVisible();expect(await fs.readFile(file,'utf8')).toBe(original);
+  await page.getByRole('button',{name:'保存',exact:true}).click();await expect.poll(async()=>parseDocumentSource('a.md',await fs.readFile(file,'utf8')).requirements[0].body).toContain('保留本地修改');
+  await page.getByRole('button',{name:'撤销',exact:true}).click();await page.getByRole('button',{name:'保存',exact:true}).click();await expect.poll(()=>fs.readFile(file,'utf8')).toBe(original);
+  await page.locator('.requirement-marker[data-requirement="'+before.meta.id+'"]').click();await page.getByRole('button',{name:'AI 辅助',exact:true}).click();await dialog.getByLabel('AI 辅助任务',{exact:true}).selectOption('draft');await dialog.getByLabel('AI 草稿标题',{exact:true}).fill('登录失败计数');await dialog.getByLabel('AI 草稿类型',{exact:true}).selectOption('test');
+  await dialog.getByRole('button',{name:'生成预览',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('生成完成，尚未修改文档');await dialog.getByRole('button',{name:'创建需求条目',exact:true}).click();await page.getByRole('button',{name:'保存',exact:true}).click();
+  await expect.poll(async()=>parseDocumentSource('a.md',await fs.readFile(file,'utf8')).requirements.length).toBe(4);
+  const draft=parseDocumentSource('a.md',await fs.readFile(file,'utf8')).requirements.at(-1)!;expect(draft.meta).toMatchObject({key:'REQ-002',title:'登录失败计数',type:'test',status:'draft'});expect(draft.meta.id).not.toBe(before.meta.id);expect(draft.body).toContain('验收：三次失败');
+  await page.locator('.requirement-marker[data-requirement="'+before.meta.id+'"]').click();await page.getByRole('button',{name:'AI 辅助',exact:true}).click();await dialog.getByLabel('AI 辅助任务',{exact:true}).selectOption('review');await dialog.getByRole('button',{name:'生成预览',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('生成完成，尚未修改文档');await expect(dialog.getByLabel('AI 候选结果',{exact:true})).toHaveAttribute('readonly','');await expect(dialog.getByRole('button',{name:'应用润色',exact:true})).toHaveCount(0);await dialog.getByRole('button',{name:'关闭',exact:true}).click();expect(requests).toHaveLength(3);
+ } finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+test('AI-UI-002：取消流式生成后不允许应用部分结果，原文不变',async()=>{
+ const server=createServer(async(req,res)=>{for await(const _chunk of req){}res.writeHead(200,{'Content-Type':'text/event-stream'});res.write('data: {"choices":[{"delta":{"content":"部分结果"}}]}\n\n');});
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+ try {
+  await page.evaluate(async baseUrl=>{await window.reqtype.saveAISettings({enabled:true,protocol:'chat-completions',model:'mock-model',baseUrl},null);},`http://127.0.0.1:${(server.address() as {port:number}).port}/v1`);
+  await selectSample();const file=path.join(root,'modules/local-save.md'),original=await fs.readFile(file,'utf8');await page.locator('.requirement-marker').first().click();await page.getByRole('button',{name:'AI 辅助',exact:true}).click();const dialog=page.getByRole('dialog',{name:'AI 辅助'});
+  await dialog.getByRole('button',{name:'生成预览',exact:true}).click();await expect(dialog.getByLabel('AI 候选结果',{exact:true})).toHaveValue('部分结果');await dialog.getByRole('button',{name:'取消生成',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('已取消，原文保留');await expect(dialog.getByRole('button',{name:'应用润色',exact:true})).toBeDisabled();expect(await fs.readFile(file,'utf8')).toBe(original);
+ } finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+test('AI-UI-003：实际文字选区只发送所选内容，应用仅替换该区间',async()=>{
+ let selected='';const server=createServer(async(req,res)=>{let body='';for await(const chunk of req)body+=chunk;selected=JSON.parse(JSON.parse(body).messages[1].content).selectedMarkdown;res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({choices:[{message:{content:'访客'},finish_reason:'stop'}]}));});
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+ try {
+  await page.evaluate(async baseUrl=>{await window.reqtype.saveAISettings({enabled:true,protocol:'chat-completions',model:'mock-model',baseUrl},null);},`http://127.0.0.1:${(server.address() as {port:number}).port}/v1`);
+  await selectSample();const file=path.join(root,'modules/local-save.md'),source=await fs.readFile(file,'utf8');await page.locator('.requirement-marker').first().click();await page.keyboard.press('Shift+ArrowRight');await page.keyboard.press('Shift+ArrowRight');await page.getByRole('button',{name:'AI 辅助',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'AI 辅助'});await expect(dialog.getByLabel('AI 选中内容',{exact:true})).toHaveText('用户');await dialog.getByRole('button',{name:'生成预览',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('生成完成，尚未修改文档');expect(selected).toBe('用户');await dialog.getByRole('button',{name:'应用润色',exact:true}).click();await page.getByRole('button',{name:'保存',exact:true}).click();
+  await expect.poll(()=>fs.readFile(file,'utf8')).toBe(source.replace('用户需要在没有网络连接时继续管理需求。','访客需要在没有网络连接时继续管理需求。'));
+ } finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+test('EDITOR-005：v2 区块中的代码首列可编辑，未闭合围栏仍隐藏标签，空区块可继续输入',async()=>{
+ const first={id:randomUUID(),key:'REQ-002',type:'requirement',status:'draft'},empty={...first,id:randomUUID(),key:'REQ-003'};
+ const source='\uFEFF'+ensureModule('# v2 编辑\n\n'+makeRequirement('第一段\n\n```ts\nconst firstColumn = 1;\n```\n\n| A | B |\n| --- | --- |\n| x | y |',first,'\n',2)+'\n\n'+makeRequirement('',empty,'\n',2)+'\n','v2 编辑',randomUUID()).replace(/\n/g,'\r\n'),file=path.join(root,'modules/v2-editor.md');
+ await fs.writeFile(file,source);await page.getByRole('button',{name:'更多操作',exact:true}).click();await page.getByRole('button',{name:'刷新工作区',exact:true}).click();await page.locator('.file-list button').filter({hasText:'v2 编辑'}).click();
+ await page.getByRole('button',{name:'编辑代码块',exact:true}).click();const line=page.locator('.cm-line').filter({hasText:/^const firstColumn = 1;$/});await line.click();await page.keyboard.insertText('/* edited */');await page.getByRole('button',{name:'保存',exact:true}).click();
+ await expect.poll(async()=>parseDocumentSource('a.md',await fs.readFile(file,'utf8')).requirements[0].body).toContain('const firstColumn = 1;/* edited */');
+  const drag=await page.locator('.cm-line').filter({hasText:/^const firstColumn = 1;/}).evaluate(el=>{const walk=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);let node:Node|null;while((node=walk.nextNode())){const at=node.textContent!.indexOf('firstColumn');if(at>=0){const range=document.createRange();range.setStart(node,at);range.setEnd(node,at+11);const rect=range.getBoundingClientRect();return {x:rect.left+1,end:rect.right-1,y:rect.top+rect.height/2};}}throw new Error('代码变量未呈现');});
+  await page.mouse.move(drag.x,drag.y);await page.mouse.down();await page.mouse.move(drag.end,drag.y,{steps:5});await page.mouse.up();await page.getByRole('button',{name:'AI 辅助',exact:true}).click();await expect(page.getByLabel('AI 选中内容',{exact:true})).toHaveText('firstColumn');await page.getByRole('button',{name:'关闭 AI 辅助',exact:true}).click();
+ await page.locator('.cm-line').filter({hasText:/^```$/}).click({clickCount:3});await expect(page.locator('.cm-content')).toBeFocused();
+ await expect.poll(()=>page.evaluate(()=>window.getSelection()?.toString())).toBe('```');await page.keyboard.insertText('``');
+ await expect(page.locator('.statusbar .has-errors')).toHaveCount(1);
+ await expect(page.locator('.cm-content')).not.toContainText(first.id);await expect(page.locator('.cm-content')).not.toContainText(empty.id);
+ await page.locator('.outline-list button').first().click();await expect(page.locator('.cm-content')).not.toContainText(empty.id);
+ await page.getByRole('button',{name:'条目表格',exact:true}).click();await page.getByRole('button',{name:'文档',exact:true}).click();
+ await expect(page.locator('.cm-content')).not.toContainText(first.id);await expect(page.locator('.cm-content')).not.toContainText(empty.id);
+ await page.getByRole('button',{name:'撤销',exact:true}).click();
+ await page.locator('.requirement-marker[data-requirement="'+empty.id+'"]').click();await page.locator('.cm-content').focus();await page.keyboard.insertText('空块中新增正文');await page.getByRole('button',{name:'保存',exact:true}).click();
+ await expect.poll(async()=>parseDocumentSource('a.md',await fs.readFile(file,'utf8')).requirements.at(-1)?.body).toBe('空块中新增正文');
+ const parsed=parseDocumentSource('a.md',await fs.readFile(file,'utf8'));expect(parsed.requirements.map(req=>req.meta)).toEqual([first,empty]);expect(parsed.diagnostics).toEqual([]);
+});
+
 test('界面编辑、属性撤销、关联、新条目与重启保存', async () => {
+  await selectSample(); // Ensure the table round trip restores a cached editor session.
   await page.getByRole('button', { name: '条目表格', exact: true }).click();
   await page.getByRole('textbox', { name: '搜索需求' }).fill('SYS-001');
   await expect(page.locator('.requirements-table tbody tr')).toHaveCount(2);
@@ -61,8 +183,12 @@ test('界面编辑、属性撤销、关联、新条目与重启保存', async ()
   await page.getByLabel('优先级', { exact: true }).selectOption('low');
   await page.getByRole('button', { name: '撤销', exact: true }).click();
   await expect(page.getByLabel('优先级', { exact: true })).toHaveValue('critical');
+  await page.getByLabel('优先级', { exact: true }).selectOption('low');
   await page.getByRole('button', { name: '条目表格', exact: true }).click();
   await page.locator('.table-key').filter({ hasText: 'SYS-001' }).click();
+  await expect(page.getByLabel('优先级', { exact: true })).toHaveValue('low');
+  await page.getByRole('button', { name: '撤销', exact: true }).click();
+  await expect(page.getByLabel('优先级', { exact: true })).toHaveValue('critical');
   await page.getByLabel('优先级', { exact: true }).selectOption('normal');
   await page.getByRole('button', { name: '撤销', exact: true }).click();
   await expect(page.getByLabel('优先级', { exact: true })).toHaveValue('critical');
@@ -351,18 +477,18 @@ test('格式迁移预览、原文备份恢复与未来模块只读', async () =>
   await page.getByRole('button',{name:'项目设置',exact:true}).click();
   await page.getByRole('button',{name:'重新载入设置',exact:true}).click();
   await page.getByRole('button',{name:'检查数据格式',exact:true}).click();
-  await expect(page.getByRole('button',{name:'升级所列 2 个文件',exact:true})).toBeEnabled();
+  await expect(page.getByRole('button',{name:'升级所列 3 个文件',exact:true})).toBeEnabled();
   expect(await fs.readFile(path.join(root,'modules/legacy.md'))).toEqual(legacy);
   await page.locator('.format-result').filter({hasText:'modules/legacy.md'}).getByText('查看迁移前后原文').click();
-  await expect(page.locator('.format-diff').first()).toContainText('reqtype: 1');
-  await page.getByRole('button',{name:'升级所列 2 个文件',exact:true}).click();
+  await expect(page.locator('.format-diff').first()).toContainText('reqtype: 2');
+  await page.getByRole('button',{name:'升级所列 3 个文件',exact:true}).click();
   await expect(page.getByRole('status')).toContainText('格式升级完成');
-  expect(await fs.readFile(path.join(root,'modules/legacy.md'))).toEqual(await fs.readFile('tests/fixtures/formats/v1/module.md'));
+  expect(await fs.readFile(path.join(root,'modules/legacy.md'))).toEqual(await fs.readFile('tests/fixtures/formats/v2/module.md'));
   await page.getByRole('button',{name:'恢复此备份',exact:true}).click();
   await expect(page.getByRole('status')).toContainText('已恢复迁移前文件');
   expect(await fs.readFile(path.join(root,'modules/legacy.md'))).toEqual(legacy);
   expect(await fs.readFile(path.join(root,'.reqtype/local/renderers.json'))).toEqual(renderers);
-  const future=await fs.readFile('tests/fixtures/formats/future/module.md');await fs.writeFile(path.join(root,'modules/future.md'),future);
+  const future=await fs.readFile('tests/fixtures/formats/future-v3/module.md');await fs.writeFile(path.join(root,'modules/future.md'),future);
   await page.getByRole('button',{name:'更多操作',exact:true}).click();await page.getByRole('button',{name:'刷新工作区',exact:true}).click();
   await page.locator('.file-list button[title="modules/future.md"]').click();
   await expect(page.getByRole('alert')).toContainText('只读');
@@ -370,7 +496,7 @@ test('格式迁移预览、原文备份恢复与未来模块只读', async () =>
   await expect(page.getByRole('button',{name:'实时预览',exact:true})).toBeDisabled();
   await expect(page.locator('.cm-content')).toHaveAttribute('contenteditable','false');
   await expect(page.getByRole('button',{name:'新建条目',exact:true})).toBeDisabled();
-  const blocked=await page.evaluate(async()=>{const snapshot=await window.reqtype.refresh(),file=snapshot.files.find(file=>file.path==='modules/future.md')!;try{await window.reqtype.save(file.path,file.content.replace('reqtype: 2','reqtype: 1'),file.version);return false;}catch(error){return (error as Error).message.includes('格式版本 2');}});
+  const blocked=await page.evaluate(async()=>{const snapshot=await window.reqtype.refresh(),file=snapshot.files.find(file=>file.path==='modules/future.md')!;try{await window.reqtype.save(file.path,file.content.replace('reqtype: 3','reqtype: 1'),file.version);return false;}catch(error){return (error as Error).message.includes('格式版本 3');}});
   expect(blocked).toBe(true);expect(await fs.readFile(path.join(root,'modules/future.md'))).toEqual(future);
 });
 
@@ -442,8 +568,8 @@ test('旧项目显式升级 v2 启用类型属性，原文备份可恢复为 v1'
   const files=(await page.evaluate(()=>window.reqtype.refresh())).files;
   await page.getByRole('button',{name:'项目设置',exact:true}).click();await page.getByRole('button',{name:'重新载入设置',exact:true}).click();
   await expect(page.locator('.settings-card').filter({has:page.getByRole('heading',{name:'自定义属性定义',exact:true})})).toContainText('当前项目格式 v1');
-  await page.getByRole('button',{name:'检查数据格式',exact:true}).click();await expect(page.getByRole('button',{name:'升级所列 1 个文件',exact:true})).toBeEnabled();expect(await fs.readFile(configFile,'utf8')).toBe(source);
-  await page.getByRole('button',{name:'升级所列 1 个文件',exact:true}).click();await expect(page.getByRole('status')).toContainText('格式升级完成');
+  await page.getByRole('button',{name:'检查数据格式',exact:true}).click();await expect(page.getByRole('button',{name:'升级所列 2 个文件',exact:true})).toBeEnabled();expect(await fs.readFile(configFile,'utf8')).toBe(source);
+  await page.getByRole('button',{name:'升级所列 2 个文件',exact:true}).click();await expect(page.getByRole('status')).toContainText('格式升级完成');
   const upgraded=await page.evaluate(()=>window.reqtype.projectSettings());expect(upgraded.config.version).toBe(2);expect(upgraded.config.id).toBe(settings.config.id);for(const type of upgraded.config.types)expect(upgraded.config.typeAttributes![type]).toEqual(['owner']);
   await expect(page.getByLabel('新属性标识',{exact:true})).toBeVisible();await page.getByRole('button',{name:'恢复此备份',exact:true}).click();await expect(page.getByRole('status')).toContainText('已恢复迁移前文件');expect(await fs.readFile(configFile,'utf8')).toBe(source);
   for(const file of files)expect(await fs.readFile(path.join(root,file.path),'utf8')).toBe(file.content);

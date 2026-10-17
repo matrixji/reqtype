@@ -3,6 +3,8 @@ import type { DesktopAPI } from '../shared/types';
 
 const invoke = (name: string, ...args: unknown[]) => ipcRenderer.invoke(`reqtype:${name}`, ...args);
 const api: DesktopAPI = {
+  aiSettings:()=>invoke('aiSettings'),saveAISettings:(input,version)=>invoke('saveAISettings',input,version),aiStart:request=>invoke('aiStart',request),aiCancel:id=>invoke('aiCancel',id),
+  onAIEvent(callback){const listener=(_event:Electron.IpcRendererEvent,event:Parameters<typeof callback>[0])=>callback(event);ipcRenderer.on('reqtype:ai',listener);return()=>ipcRenderer.removeListener('reqtype:ai',listener);},
   initial: () => invoke('initial'), open: create => invoke('open', create), refresh: () => invoke('refresh'),
   save: (path, content, version) => invoke('save', path, content, version),
   projectSettings: () => invoke('projectSettings'), saveProject: (config, version, renderers) => invoke('saveProject', config, version, renderers),

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reqtype.local/schemas/module-v2.schema.json",
+  "title": "ReqType Markdown front matter v2",
+  "type": "object",
+  "properties": {
+    "reqtype": {
+      "const": 2
+    },
+    "module": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$"
+    },
+    "title": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reqtype",
+    "module"
+  ],
+  "additionalProperties": true
+}

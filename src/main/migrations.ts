@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { FORMATS, assertFormatVersion, isRecord, migrateSource, type MigrationDefinition } from '../core/formats';
-import { ensureModule, indexWorkspace, moduleVersion, parseDocumentSource } from '../core/markdown';
+import { ensureModule, indexWorkspace, moduleVersion, parseDocumentSource, upgradeModuleSource } from '../core/markdown';
 import { parseConfig, patchProjectConfig, validateRelativePath } from '../core/config';
 import { readRendererDocument, writeRendererDocument } from '../core/rendering';
 import { Workspace, applyTransaction, atomicWrite, decode, digest, exists, readJournalDocument, readOptional, safePath, writeJournalDocument } from './workspace';
@@ -17,7 +17,11 @@ const moduleDefinition = (file: string): MigrationDefinition => ({
   current: FORMATS.module.current,
   readVersion(source) { const value = moduleVersion(source); if (value === undefined) return 0; assertFormatVersion('module', value); return value; },
   validate(source) { const parsed = parseDocumentSource(file, source); if (parsed.diagnostics.some(x => x.severity === 'error')) throw new Error(parsed.diagnostics[0].message); if (!parsed.moduleId) throw new Error('缺少稳定模块 ID，迁移不会自动分配身份；请先补全模块信息'); },
-  steps: [{ from: 0, to: 1, id: 'module-0-to-1', transform(source) { const before = parseDocumentSource(file, source); const output = ensureModule(source, before.title, before.moduleId!); const after = parseDocumentSource(file, output); const semantics = (doc: typeof before) => JSON.stringify({ module: doc.moduleId, title: doc.title, requirements: doc.requirements.map(req => ({ meta: req.meta, body: req.body })) }); if (semantics(before) !== semantics(after)) throw new Error('模块迁移改变了身份、属性或正文'); return output; } }],
+  steps: [{ from: 0, to: 1, id: 'module-0-to-1', transform(source) { return ensureModule(source,parseDocumentSource(file,source).title,parseDocumentSource(file,source).moduleId!); } },
+    {from:1,to:2,id:'module-1-to-2',transform(source){
+      const semantics=(text:string)=>{const doc=parseDocumentSource(file,text);return JSON.stringify({module:doc.moduleId,title:doc.title,requirements:doc.requirements.map(req=>({meta:req.meta,body:req.body}))});};
+      const output=upgradeModuleSource(source);if(semantics(source)!==semantics(output))throw new Error('模块迁移改变了身份、属性或正文');return output;
+    }}],
 });
 export function migrateDataSource(kind: MigratableKind, source: string, file = 'module.md') {
   if (kind === 'module') return migrateSource(source, moduleDefinition(file));

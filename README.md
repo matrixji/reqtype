@@ -6,7 +6,7 @@
 
 ## 开始使用
 
-当前为可运行的 v0.2.1 桌面版本，采用 Electron、TypeScript、React 和 CodeMirror 6。本工程已包含自己的需求工作区：打开项目根目录，即可管理 `requirements/` 下的 57 个条目和跨模块关联。
+项目采用 Electron、TypeScript、React 和 CodeMirror 6。本工程已包含自己的需求工作区：打开项目根目录，即可管理 `requirements/` 下的 57 个条目和跨模块关联。以下描述对应当前源码，已发布安装包的功能以对应 Release Notes 为准。
 
 从 [GitHub Releases](https://github.com/matrixji/reqtype/releases) 下载对应架构的 ZIP，解压后打开 macOS 的 `ReqType.app` 或 Windows 目录内的 `ReqType.exe`，无需安装 Node.js。当前原生检查与发行流程见[开发与发布](docs/delivery.md)，早期本机验证记录保留在 [v0.2.0 验证记录](docs/validation-v0.2.0.md)。
 
@@ -39,6 +39,9 @@ npm start
 - 按类型配置文本、数值、数组等属性，通过表单快速填写；独立标题支持部分检索。
 - 文档编辑、条目表格和关联面板操作同一份源数据。
 - 任意连续内容块可转换为条目，保留正文、表格和图片。
+- Markdown v2 使用 begin/end 区块，预览显示浮动 tip 与虚线框，保护隐藏边界；旧模块通过显式迁移升级。
+- 使用 `[[[显示文字:req-UUID]]]` 引用需求，支持标题／编号补全、跳转与独立的正文反向引用。
+- 可选 AI 辅助：选中文字润色、需求草稿、质量建议；支持外部或本机 Chat Completions 兼容服务，预览后应用，默认关闭。
 - 内置本地 Git 状态、差异、提交和历史查看。
 - 支持数据导入导出，以及命令、校验规则、交换适配器和代码块渲染插件。
 - 代码高亮、Mermaid、PlantUML（JAR／Server）、公式、任务、脚注、提示块与目录；渲染资源随应用本地打包。
@@ -48,7 +51,9 @@ npm start
 
 ## 数据格式与升级
 
-项目、Markdown、交换包与本机状态分别定版本，当前项目格式 v2，兼容读取 v1；Markdown 与交换包保持 v1。项目设置中的“数据格式与迁移”可只读检查、预览旧布局升级、保存原文备份并显式恢复。未来版本会被拒写；恢复保护迁移后的人工编辑。详见[格式契约](docs/data-formats.md)。
+项目、Markdown、交换包与本机状态分别定版本。项目与 Markdown 当前均为 v2，兼容读取各自的 v1，旧 Markdown 普通保存继续保留 v1；交换外壳保持 v1。项目设置中的“数据格式与迁移”可检查、预览升级、保存原文备份并显式恢复。未来版本会被拒写；恢复保护迁移后的人工编辑。详见[格式契约](docs/data-formats.md)、[Markdown 语法](docs/markdown-syntax.md)和 [AI 辅助](docs/ai.md)。
+
+本轮源码变更的实际测试与平台边界见[区块、引用与 AI 验证记录](docs/validation-editor-v2.md)。
 
 ```sh
 npm run data -- check /path/to/project

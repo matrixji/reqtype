@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { stringify } from 'yaml';
 import { defaultPlantuml, readRendererDocument, writeRendererDocument } from '../core/rendering';
 import { attributesForType, defaultConfig, parseConfig, patchProjectConfig, validateRelativePath } from '../core/config';
-import { assertModuleWritable, ensureModule, indexWorkspace, makeRequirement, parseDocumentSource } from '../core/markdown';
+import { assertModuleWritable, ensureModule, indexWorkspace, makeRequirement, moduleVersion, parseDocumentSource } from '../core/markdown';
 import { envelope, isRecord, readEnvelope } from '../core/formats';
 import type { FileSnapshot, ProjectConfig, ProjectSettings, RendererSettings, WorkspaceSnapshot } from '../shared/types';
 
@@ -28,12 +28,12 @@ export async function readOptional(file: string): Promise<Buffer | null> {
   try { return await fs.readFile(file); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
 }
 
-export async function atomicWrite(file: string, bytes: Uint8Array, expected?: string | null) {
+export async function atomicWrite(file: string, bytes: Uint8Array, expected?: string | null, newMode=0o644) {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const current = await readOptional(file);
   if (expected !== undefined && (current ? digest(current) : null) !== expected) throw new Error('文件已被外部修改，请先处理冲突后再保存');
   if (current?.equals(bytes)) return;
-  const mode = current ? (await fs.stat(file)).mode : 0o644;
+  const mode = current ? (await fs.stat(file)).mode : newMode;
   const temporary = path.join(path.dirname(file), `.${path.basename(file)}.reqtype-${randomUUID()}.tmp`);
   try {
     const handle = await fs.open(temporary, 'wx', mode);
@@ -146,7 +146,7 @@ export class Workspace {
     const file = await safePath(workspace.root, '.reqtype/project.yaml');
     if (!await exists(file)) {
       await atomicWrite(file, Buffer.from(stringify({ ...defaultConfig(path.basename(workspace.root)), id: randomUUID() }, { lineWidth: 0 })), null);
-      const body = makeRequirement('软件应在离线状态下保存需求文档。', { id: randomUUID(), key: 'REQ-001', type: 'requirement', status: 'draft', priority: 'normal' });
+      const body = makeRequirement('软件应在离线状态下保存需求文档。', { id: randomUUID(), key: 'REQ-001', type: 'requirement', status: 'draft', priority: 'normal' },'\n',2);
       const welcome = ensureModule(`# 我的需求\n\n从这里开始。选中一段内容，可以转换为需求条目。\n\n${body}\n`, '我的需求', randomUUID());
       const target = await safePath(workspace.root, 'modules/welcome.md');
       if (!await exists(target)) await atomicWrite(target, Buffer.from(welcome), null);
@@ -233,6 +233,7 @@ export class Workspace {
     const target = await safePath(this.root, relative), old = await readOptional(target);
     if (old) assertModuleWritable(decode(old));
     assertModuleWritable(content);
+    if(old&&moduleVersion(decode(old))!==undefined&&moduleVersion(decode(old))!==moduleVersion(content))throw new Error('模块格式版本只能通过数据格式迁移修改，不能直接升降级');
     const snapshot = await this.snapshot(), before = indexWorkspace(snapshot.files, config);
     const previous = new Map(before.requirements.map(req => [req.meta.id, req]));
     for (const req of parseDocumentSource(relative, content).requirements) {

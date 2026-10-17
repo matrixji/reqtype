@@ -1,3 +1,4 @@
+import type { AIEvent, AIRequest, AISettings, AISettingsInput } from './ai-types';
 export interface AttributeDefinition { type: 'string' | 'number' | 'array' | 'boolean' | 'enum'; label?: string; description?: string; values?: string[]; items?: 'string' | 'number'; [key: string]: unknown }
 export interface Link { type: string; target: string }
 export interface RequirementMeta {
@@ -11,7 +12,8 @@ export interface Requirement {
 }
 export interface Diagnostic { path: string; from: number; severity: 'error' | 'warning'; message: string; id?: string }
 export interface Heading { depth: number; text: string; from: number }
-export interface ParsedDocument { readOnly: boolean; path: string; moduleId?: string; title: string; requirements: Requirement[]; diagnostics: Diagnostic[]; headings: Heading[]; frontmatter?: { from: number; to: number; yamlFrom: number; yamlTo: number }; blocks: { from: number; to: number; type: string }[] }
+export interface TextReference { path: string; from: number; to: number; target: string; label?: string; sourceId?: string }
+export interface ParsedDocument { readOnly: boolean; version?: 1 | 2; path: string; moduleId?: string; title: string; requirements: Requirement[]; references: TextReference[]; diagnostics: Diagnostic[]; headings: Heading[]; frontmatter?: { from: number; to: number; yamlFrom: number; yamlTo: number }; blocks: { from: number; to: number; type: string }[] }
 export interface FileSnapshot { path: string; content: string; version: string }
 export interface ProjectConfig {
   version: 1 | 2; id?: string; name: string; description?: string; documents: string[]; assets: string[];
@@ -42,6 +44,11 @@ export interface PluginSnapshot { files: FileSnapshot[]; requirements: Requireme
 export interface PluginResult { html?: string; message?: string; diagnostics?: Diagnostic[]; text?: string; files?: { path: string; content: string }[]; importPreview?: ImportPreview; edits?: { path: string; expectedSource: string; source: string }[] }
 export interface TypeMigrationPreview { token: string; from: string; to: string; entries: { path: string; id: string; key?: string; title: string }[]; warnings: string[] }
 export interface DesktopAPI {
+  aiSettings():Promise<AISettings>;
+  saveAISettings(input:AISettingsInput,version:string|null):Promise<AISettings>;
+  aiStart(request:AIRequest):Promise<{id:string}>;
+  aiCancel(id:string):Promise<void>;
+  onAIEvent(callback:(event:AIEvent)=>void):()=>void;
   initial(): Promise<WorkspaceSnapshot | null>;
   open(create?: boolean): Promise<WorkspaceSnapshot | null>;
   refresh(): Promise<WorkspaceSnapshot>;
