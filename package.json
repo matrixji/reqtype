@@ -13,7 +13,9 @@
     "test": "tsx --test tests/*.test.ts",
     "test:e2e": "npm run build && playwright test",
     "package": "npm run build && node scripts/package.mjs",
-    "data": "tsx scripts/data.mts"
+    "data": "tsx scripts/data.mts",
+    "setup:git": "git config core.hooksPath .githooks",
+    "github:protect": "node scripts/github-protection.mts"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",

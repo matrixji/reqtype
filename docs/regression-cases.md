@@ -82,3 +82,16 @@ npm run data -- check /path/to/project
 入口：[桌面用例](../tests/e2e/desktop.spec.ts)。每次修改按影响范围维护这些流程；真实系统输入法、Windows 实机、性能规模和进程强杀验证应单独记录，不用交叉打包或模拟故障替代。
 
 新增业务格式版本时，保留旧版夹具与 Schema，补充真实升级链、各源／目标版本的校验器及迁移后完整交换。协议细节见[数据格式契约](data-formats.md)，执行结果见[v0.1.1 验证记录](validation-v0.2.0.md)。
+
+## GitHub 交付
+
+| 编号 | 场景与验收结果 |
+| --- | --- |
+| DELIVERY-001 | tag 与应用版本严格匹配，拒绝非法 SemVer、路径及不支持的架构 |
+| DELIVERY-002 | 三个平台 ZIP 必须齐备，按精确字节计算 SHA-256；缺失、意外或空资产拒绝 |
+| DELIVERY-003 | 真实临时 Git 仓库验证 tag 提交已包含于 main，版本与 lockfile 一致；未合入提交拒绝 |
+| DELIVERY-004 | CI 汇总三个原生环境；发布仅由 tag push 触发，写权限仅提供给发布 job，Actions 固定提交 |
+| DELIVERY-005 | PR／手动分支事件不能调用脚本发布 Release |
+| DELIVERY-006 | 真实本地裸仓库 dry-run 验证钩子拒绝 main、允许工作分支，不访问 GitHub |
+
+入口：[交付回归](../tests/delivery.test.ts)。三平台原生开发版和发行包均运行上述九项桌面流程。离线文档在 1050×684 视口验证，滚动后断言章末远程图片占位确实出现在视口且未联网；剪贴板按系统换行规范化比较，文档落盘仍逐字校验。执行记录与流程见[开发与发布](delivery.md)。

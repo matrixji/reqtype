@@ -2,7 +2,7 @@
 
 ## 当前阶段
 
-- 用户已明确要求实现第一个可用版本、初始化 Git，并使用软件管理自身工程需求。当前为 v0.1 开发与验证阶段。
+- 用户已明确要求实现第一个可用版本、初始化 Git，并使用软件管理自身工程需求。当前为 v0.2 开发与验证阶段。
 - 以当前源码、实际测试和运行证据为准，不把设计目标写成已验证能力。
 - 优先使用中文沟通和编写产品文档，代码标识符遵循所选语言的惯例。
 
@@ -41,6 +41,7 @@
 - `docs/markdown-features.md`：技术文档扩展、离线资源和 PlantUML 配置。
 - `docs/data-formats.md` 与 `docs/regression-cases.md`：格式版本契约、迁移规则和回归矩阵。
 - `docs/project-item-model.md`：编号只读、类型套餐与迁移、按类型属性和标题检索。
+- `docs/delivery.md` 与 `docs/mac-app-store.md`：GitHub PR／tag 发行和 App Store 准备边界。
 - `src/core/`：源文本解析、条目与关联；`src/main/`：文件、交换、Git、插件和桌面桥接；`src/renderer/`：React 与编辑器。
 
 ## 后续增强与规模验证
@@ -67,6 +68,9 @@
 - 修改源区间、文件保存或 Git 时运行对应核心检查；修改编辑器、IPC 或界面操作时运行桌面流程。
 - CodeMirror 块组件不得设置垂直 margin；使用外层 padding，动态图片加载后调用 `requestMeasure()`。组件复用必须考虑位置变化，重建编辑器要重新绑定监听器并保留撤销状态。
 - macOS 上通过的构建和桌面测试不证明 Windows 运行通过；验证记录需区分本机运行、交叉打包与真实 Windows 执行。
+- GitHub 仓库保持私有。后续修改走工作分支及 PR，全部 `CI required` 检查通过后 squash 合并；禁止直接推送 `main`。本机执行 `npm run setup:git`，但不得将本机钩子描述为服务端强制保护。
+- tag `v<package.json 版本>` 只标记已合入 `main` 的提交，成功后创建 Release；应用版本与数据格式分别管理，不为发布流水线修改项目格式。不得重写已发行 tag 或替换发行资产。
+- Mac App Store 使用独立 MAS 构建、App Sandbox 和签名；普通 darwin ZIP 通过不等于可上架，证书／描述文件不得入库。
 
 ## 条目模型约定
 

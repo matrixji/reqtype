@@ -240,6 +240,7 @@ test('项目设置、编号默认值、状态流转与导出偏好可持久化',
 });
 
 test('离线 Markdown：代码、架构图、公式、任务、脚注、提示块和本地插件', async () => {
+  await page.setViewportSize({ width: 1050, height: 684 });
   const body = [
     '[TOC]', '', '## 代码示例', '', '```typescript title="API.ts"', 'export interface Service { name: string }', 'const ready = true;', '```', '',
     '## 公式', '', '返回值 $x^2$。', '', '$$', 'E=mc^2', '$$', '',
@@ -262,7 +263,8 @@ test('离线 Markdown：代码、架构图、公式、任务、脚注、提示�
   await expect(code.locator('.hljs-keyword').first()).toBeVisible();
   await code.getByRole('button',{name:'复制代码块',exact:true}).click();
   await expect(code.getByRole('button',{name:'复制代码块',exact:true})).toHaveText('已复制');
-  await expect.poll(() => app.evaluate(async ({clipboard},expected)=>(await clipboard.readText())===expected, 'export interface Service { name: string }\nconst ready = true;')).toBe(true);
+  // Windows 剪贴板使用 CRLF；比较文本内容，文件原文仍由后续逐字断言验证。
+  await expect.poll(async () => (await app.evaluate(({clipboard}) => clipboard.readText())).replace(/\r\n/g, '\n')).toBe('export interface Service { name: string }\nconst ready = true;');
   await code.getByRole('button',{name:'编辑代码块',exact:true}).click();
   await page.keyboard.insertText('// 本地编辑\n');
   await page.getByRole('button',{name:'保存',exact:true}).click();
@@ -296,7 +298,10 @@ test('离线 Markdown：代码、架构图、公式、任务、脚注、提示�
   await section('说明');
   await expect(page.locator('.markdown-alert.alert-important')).toContainText('不需要网络');
   await expect(page.locator('.inline-footnote')).toHaveText('[api]');
+  // CodeMirror 按视口挂载内容；小窗口下，章末图片尚未进入渲染范围。
+  await page.locator('.cm-scroller').evaluate(scroller => scroller.scrollTo({ top: scroller.scrollHeight }));
   await expect(page.locator('.offline-resource')).toContainText('网络图片未加载');
+  await expect(page.locator('.offline-resource')).toBeInViewport();
   expect(await app.evaluate(()=>(globalThis as any).remoteRequests)).toEqual([]);
   await section('代码示例');
   await expect(page.getByRole('navigation',{name:'文档目录'})).toBeVisible();

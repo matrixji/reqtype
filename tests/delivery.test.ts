@@ -48,3 +48,11 @@ test('DELIVERY-005：PR 或手动分支构建不能通过发布脚本创建 Rele
  const result=spawnSync(process.execPath,['scripts/publish-release.mts'],{encoding:'utf8',env:{...process.env,RELEASE_TAG:'v0.2.0',GITHUB_EVENT_NAME:'pull_request',GITHUB_REF_TYPE:'branch',GITHUB_REF_NAME:'main'}});
  assert.notEqual(result.status,0);assert.match(result.stderr,/只允许版本 tag push/);
 });
+
+test('DELIVERY-006：本机推送钩子拒绝 main，允许工作分支，测试不访问远程',async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'reqtype-prepush-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const local=path.join(root,'local'),remote=path.join(root,'remote.git');await fs.mkdir(local);
+ const git=(...args:string[])=>execFileSync('git',args,{cwd:local,stdio:'pipe'});git('init','-b','main');git('config','user.name','Hook test');git('config','user.email','hook@example.invalid');await fs.writeFile(path.join(local,'file'),'content');git('add','.');git('commit','-m','Initial');git('init','--bare',remote);
+ const hook=path.resolve('.githooks'),run=(branch:string)=>spawnSync('git',['-c',`core.hooksPath=${hook}`,'push','--dry-run',remote,`HEAD:refs/heads/${branch}`],{cwd:local,encoding:'utf8'});
+ assert.notEqual(run('main').status,0);assert.match(run('main').stderr,/Pull Request/);const feature=run('feature/test');assert.equal(feature.status,0,feature.stderr);
+});
