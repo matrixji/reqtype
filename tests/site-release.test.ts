@@ -20,11 +20,12 @@ async function setup(t:TestContext,version='1.2.3') {
 }
 
 async function service(t:TestContext,manifest:SiteManifest,options:{drop?:boolean;redirect?:string;unauthorized?:boolean;newer?:boolean}={}) {
-  const state:{posts:number;release:any;site:any;errors:string[]}={posts:0,release:undefined,site:{description:'原有稳定版介绍'},errors:[]};
+  const state:{posts:number;redirected:number;release:any;site:any;errors:string[]}={posts:0,redirected:0,release:undefined,site:{description:'原有稳定版介绍'},errors:[]};
   let origin='';
   const server=createServer((request,response)=>{void(async()=>{
     const url=new URL(request.url??'/',origin);
     const reply=(code:number,value:unknown)=>{response.writeHead(code,{'Content-Type':'application/json'});response.end(JSON.stringify(value));};
+    if(url.pathname==='/stolen'){state.redirected++;return reply(200,{error:'不应访问重定向目标'});}
     if(request.method==='GET'){
       if(url.pathname==='/api/releases')return reply(200,{releases:state.release?.channel==='stable'?[state.release]:[]});
       if(url.pathname==='/api/site')return reply(200,{site:state.site,latest:state.release?.channel==='stable'?state.release:null,downloads:Object.fromEntries((state.release?.channel==='stable'?state.release.artifacts:[]).map((file:any)=>[`${file.platform}-${file.arch}`,{...file,version:state.release.version}]))});
@@ -93,10 +94,23 @@ test('SITE-004：预发布走 beta，保留稳定首页；更高版本阻止上�
 
 test('SITE-005：认证失败与重定向不重试、不泄漏 Token；PR 事件不能部署',async t=>{
   const data=await setup(t);
-  for(const options of [{unauthorized:true},{redirect:'http://127.0.0.1:1/stolen'}]){
+  for(const options of [{unauthorized:true},{redirect:'/stolen'}]){
     const server=await service(t,data.manifest,options);
-    await assert.rejects(deploySite({...data,...server,token}),error=>{assert.ok(!(error as Error).message.includes(token));return true;});assert.equal(server.state.posts,1);assert.equal(server.state.release,undefined);
+    await assert.rejects(deploySite({...data,...server,token}),error=>{assert.ok(!(error as Error).message.includes(token));return true;});assert.equal(server.state.posts,1);assert.equal(server.state.redirected,0);assert.equal(server.state.release,undefined);
   }
   const result=spawnSync(process.execPath,['scripts/deploy-release.mts'],{encoding:'utf8',env:{...process.env,GITHUB_EVENT_NAME:'pull_request',GITHUB_REF_TYPE:'branch'}});
   assert.notEqual(result.status,0);assert.match(result.stderr,/只允许版本 tag push/);
+});
+
+test('SITE-006：部署入口拒绝错误校验文件、错误 tag 提交与被修改的 GitHub ZIP，不访问发布 API',async t=>{
+  const data=await setup(t),commit='a'.repeat(40);
+  await fs.writeFile(path.join(data.directory,'package.json'),JSON.stringify({version:'1.2.3'}));
+  const manifest=path.join(data.directory,'manifest.json');await fs.writeFile(manifest,JSON.stringify({version:'1.2.3',files:data.files,commit}));
+  const checksums=path.join(data.directory,'SHA256SUMS.txt');await fs.writeFile(checksums,'invalid');
+  const env={...process.env,GITHUB_EVENT_NAME:'push',GITHUB_REF_TYPE:'tag',GITHUB_REF_NAME:'v1.2.3',GITHUB_SHA:commit,GH_REPO:'example/repository',REQTYPE_SITE_URL:'http://127.0.0.1:1',REQTYPE_SITE_TOKEN:token};
+  const run=()=>spawnSync(process.execPath,[path.resolve('scripts/deploy-release.mts'),data.directory],{cwd:data.directory,env,encoding:'utf8'});
+  let result=run();assert.notEqual(result.status,0);assert.match(result.stderr,/校验文件与发行包不一致/);
+  await fs.writeFile(checksums,data.files.map(file=>`${file.sha256}  ${file.name}`).join('\n')+'\n');
+  await fs.writeFile(manifest,JSON.stringify({version:'1.2.3',files:data.files,commit:'b'.repeat(40)}));result=run();assert.notEqual(result.status,0);assert.match(result.stderr,/不属于当前 tag 提交/);
+  await fs.writeFile(path.join(data.directory,data.files[0].name),'tampered');result=run();assert.notEqual(result.status,0);assert.match(result.stderr,/清单与下载文件哈希不一致/);
 });
