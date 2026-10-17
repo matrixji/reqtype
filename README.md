@@ -8,7 +8,7 @@
 
 当前为可运行的 v0.2.0 桌面版本，采用 Electron、TypeScript、React 和 CodeMirror 6。本工程已包含自己的需求工作区：打开项目根目录，即可管理 `requirements/` 下的 57 个条目和跨模块关联。
 
-本轮打包应用位于 `release/0.2.0/`，可直接打开 macOS 的 `ReqType.app` 或 Windows 目录内的 `ReqType.exe`，无需安装 Node.js。具体运行证据与平台限制见[本轮验证记录](docs/validation-v0.2.0.md)。
+从 [GitHub Releases](https://github.com/matrixji/reqtype/releases) 下载对应架构的 ZIP，解压后打开 macOS 的 `ReqType.app` 或 Windows 目录内的 `ReqType.exe`，无需安装 Node.js。当前原生检查与发行流程见[开发与发布](docs/delivery.md)，早期本机验证记录保留在 [v0.2.0 验证记录](docs/validation-v0.2.0.md)。
 
 从源码运行需要 Node.js 24 或更新版本，以及用于版本管理的 Git：
 

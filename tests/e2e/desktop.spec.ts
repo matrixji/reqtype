@@ -104,6 +104,32 @@ test('界面编辑、属性撤销、关联、新条目与重启保存', async ()
   await expect(page.locator('.requirements-table tbody tr')).toHaveCount(1);
 });
 
+test('导航完成前聚焦标题表单，延后定位不得抢走焦点或改写正文', async () => {
+  const file=path.join(root,'modules/local-save.md');
+  const before=parseDocumentSource('modules/local-save.md',await fs.readFile(file,'utf8')).requirements.find(req=>req.meta.key==='SYS-001')!;
+  await page.setViewportSize({width:1050,height:684});
+  await page.getByRole('button',{name:'条目表格',exact:true}).click();
+  // 在导航挂载表单的同一轮 DOM 更新中聚焦，稳定覆盖快速开始编辑的交互。
+  await page.evaluate(() => {
+    const observer=new MutationObserver(() => {
+      const input=document.querySelector<HTMLInputElement>('input[aria-label="条目标题"]');
+      if(input){input.focus();observer.disconnect();}
+    });
+    observer.observe(document.body,{childList:true,subtree:true});
+    const button=[...document.querySelectorAll<HTMLButtonElement>('.table-key')].find(button=>button.textContent?.includes('SYS-001'))!;
+    button.click();
+  });
+  const title=page.getByLabel('条目标题',{exact:true});
+  await expect(title).toBeFocused();
+  await expect(page.locator('.cm-line').filter({hasText:'软件应在离线状态下将需求文档保存到用户选择的本地工作区。'})).toBeInViewport();
+  await expect(title).toBeFocused();
+  await page.keyboard.insertText('焦点保护后的独立标题');await title.press('Tab');
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  await expect.poll(async()=>parseDocumentSource('modules/local-save.md',await fs.readFile(file,'utf8')).requirements.find(req=>req.meta.id===before.meta.id)?.meta.title).toBe('焦点保护后的独立标题');
+  const after=parseDocumentSource('modules/local-save.md',await fs.readFile(file,'utf8')).requirements.find(req=>req.meta.id===before.meta.id)!;
+  expect(after.body).toBe(before.body);expect(after.meta.key).toBe(before.meta.key);
+});
+
 test('外部修改冲突保护与显式保留本地版本', async () => {
   await selectSample();
   await page.getByRole('button', { name: '源码', exact: true }).click();

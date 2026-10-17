@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useLayoutEffect, useImperativeHandle, useRef } from 'react';
 import { Compartment, EditorSelection, EditorState, StateEffect, StateField, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, keymap, lineNumbers, placeholder, WidgetType, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory, undo, redo } from '@codemirror/commands';
@@ -131,7 +131,7 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(props, ref
   latest.current = props;
   const modeExtension = (sourceMode: boolean) => sourceMode ? [lineNumbers(), EditorView.editorAttributes.of({ class: 'source-editor' })] : [livePreview(latest.current.path), EditorView.editorAttributes.of({ class: 'live-editor' })];
   useImperativeHandle(ref, () => ({ selection: () => { const sel = view.current?.state.selection.main; return { from: rawOffset(raw.current, sel?.from ?? 0), to: rawOffset(raw.current, sel?.to ?? 0) }; }, jump(from) { const pos = normalizedOffset(raw.current, from); view.current?.dispatch({ selection: EditorSelection.cursor(Math.min(pos, view.current.state.doc.length)), effects: EditorView.scrollIntoView(pos, { y: 'center' }) }); view.current?.focus(); }, undo() { if (view.current) undo(view.current); }, redo() { if (view.current) redo(view.current); } }));
-  useEffect(() => {
+  useLayoutEffect(() => {
     const props = latest.current;
     raw.current = props.source;
     const cached = sessions.get(props.sessionKey);
@@ -167,14 +167,14 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(props, ref
     const editor = new EditorView({ state, parent: host.current! }); view.current = editor;
     return () => { sessions.set(props.sessionKey, { state: editor.state, raw: raw.current, epoch: props.epoch }); editor.destroy(); view.current = null; if (sessions.size > 50) sessions.delete(sessions.keys().next().value!); };
   }, [props.sessionKey, props.epoch]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const editor = view.current;
     if (!editor) return;
     const before = editor.state.doc.toString(), after = normalize(props.source);
     raw.current = props.source;
     if (before !== after) { applying.current = true; editor.dispatch({ changes: minimalChange(before, after), userEvent: 'input', annotations: isolateHistory.of('full') }); applying.current = false; }
   }, [props.source]);
-  useEffect(() => { view.current?.dispatch({ effects: mode.current.reconfigure(modeExtension(props.sourceMode)) }); }, [props.sourceMode]);
+  useLayoutEffect(() => { view.current?.dispatch({ effects: mode.current.reconfigure(modeExtension(props.sourceMode)) }); }, [props.sourceMode]);
   useEffect(() => { view.current?.dispatch({ effects: spelling.current.reconfigure(EditorView.contentAttributes.of({ spellcheck: String(props.spellcheck) })) }); }, [props.spellcheck]);
   useEffect(() => { view.current?.dispatch({ effects: editing.current.reconfigure([EditorState.readOnly.of(Boolean(props.readOnly)), EditorView.editable.of(!props.readOnly)]) }); }, [props.readOnly]);
   return <div className="editor-host" ref={host} data-testid="markdown-editor" />;
