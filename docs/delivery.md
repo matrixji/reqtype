@@ -41,6 +41,8 @@ gh pr merge --squash --delete-branch
 
 桌面回归默认后台运行：启动器设置 `REQTYPE_E2E_BACKGROUND=1` 并提供独立 `REQTYPE_USER_DATA`，应用创建隐藏窗口，macOS 使用 accessory 激活策略，测试核对窗口不可见、未聚焦。仅此测试模式关闭后台计时节流，截图和渲染断言继续工作。需要验证操作系统焦点、输入法或原生对话框时另行安排前台验收，不在日常回归中反复抢占桌面。相关 API 见 [Electron 页面可见性](https://www.electronjs.org/docs/latest/api/browser-window#page-visibility)。
 
+Windows 的隐藏窗口在关闭后台节流后仍出现每次点击约 2 秒的双帧稳定等待，因此测试窗口启用 Electron [离屏绘制](https://www.electronjs.org/docs/latest/tutorial/offscreen-rendering)；普通应用启动保持正常绘制方式。判断此类问题时查看 trace 中动作等待的实际耗时，不能仅凭总时间认定测试挂起。
+
 ## tag 与 Release
 
 先通过 PR 修改 `package.json` 和 `package-lock.json` 的应用版本并完成合并，再从同步后的 `main` 创建 tag：
