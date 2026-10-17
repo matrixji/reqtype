@@ -13,11 +13,13 @@ let pageErrors: string[];
 async function launch(remember = false) {
   const env: Record<string, string> = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
   env.REQTYPE_USER_DATA = userData;
+  env.REQTYPE_E2E_BACKGROUND = '1';
   delete env.ELECTRON_RUN_AS_NODE;
   const executablePath = process.env.REQTYPE_E2E_EXECUTABLE;
   app = await _electron.launch({ executablePath, args: [...executablePath ? [] : ['.'], ...remember ? [] : ['--workspace=' + root]], env });
   if (executablePath) expect(await app.evaluate(({app})=>({packaged:app.isPackaged,version:app.getVersion()}))).toEqual({packaged:true,version:JSON.parse(await fs.readFile('package.json','utf8')).version});
   page = await app.firstWindow();
+  expect(await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows().map(window => ({visible:window.isVisible(),focused:window.isFocused()})))).toEqual([{visible:false,focused:false}]);
   page.on('pageerror', error => pageErrors.push(error.message));
   await expect(page.locator('.workspace-heading h2')).toBeVisible();
 }

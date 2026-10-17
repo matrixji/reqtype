@@ -39,6 +39,8 @@ gh pr merge --squash --delete-branch
 
 失败保留截图、上下文和 trace；成功上传未签名 ZIP。Actions 构建及验证产物保留 7 天。所有第三方 Actions 固定到提交 SHA；PR 作业仅有读取权限、不使用发布凭据，只有发布 job 获得 `contents: write`。
 
+桌面回归默认后台运行：启动器设置 `REQTYPE_E2E_BACKGROUND=1` 并提供独立 `REQTYPE_USER_DATA`，应用创建隐藏窗口，macOS 使用 accessory 激活策略，测试核对窗口不可见、未聚焦。仅此测试模式关闭后台计时节流，截图和渲染断言继续工作。需要验证操作系统焦点、输入法或原生对话框时另行安排前台验收，不在日常回归中反复抢占桌面。相关 API 见 [Electron 页面可见性](https://www.electronjs.org/docs/latest/api/browser-window#page-visibility)。
+
 ## tag 与 Release
 
 先通过 PR 修改 `package.json` 和 `package-lock.json` 的应用版本并完成合并，再从同步后的 `main` 创建 tag：
