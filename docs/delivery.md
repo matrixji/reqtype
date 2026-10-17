@@ -50,14 +50,16 @@ Windows 的隐藏窗口在关闭后台节流后仍出现每次点击约 2 秒的
 ```sh
 git switch main
 git pull --ff-only
-# 示例：应用版本已为 0.2.0，且该 tag 尚不存在
-git tag -a v0.2.0 -m 'ReqType v0.2.0'
-git push origin v0.2.0
+# 示例：应用版本已为 0.2.1，且该 tag 尚不存在
+git tag -a v0.2.1 -m 'ReqType v0.2.1'
+git push origin v0.2.1
 ```
 
 `release.yml` 要求严格 SemVer、tag 与两份版本文件完全一致，且提交已包含在 `origin/main`。随后重新执行三平台完整构建和两套桌面回归，成功后才发布。`v0.2.1-rc.1` 等预发布版本会标记 prerelease。
 
 资产包括 `ReqType-<version>-macos-arm64-unsigned.zip`、`macos-x64-unsigned.zip`、`windows-x64-unsigned.zip`，以及 `manifest.json` 与 `SHA256SUMS.txt`。清单记录精确字节大小、哈希、版本和提交。必须齐备三个 ZIP；缺失、多余或空 ZIP 会中止发布。
+
+GitHub Release 创建成功后，独立 deploy job 上传已发布产物并更新 <https://reqtype.localcloud.site>。官网日志使用最终 Release Notes，首页介绍使用其摘要；凭据隔离、不可变版本与失败重跑规则见[官网自动发布](website-release.md)。
 
 ZIP 为解压运行的桌面预览包，尚未进行 Apple 公证或 Windows 签名；MAS 另见[上架准备](mac-app-store.md)。运行程序无需 Node.js；本地 Git 功能仍需系统 Git，PlantUML JAR 需本机 Java 21。图形、公式、字体及 JAR 随包提供，首次安装后渲染不依赖 CDN。
 

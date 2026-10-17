@@ -6,7 +6,7 @@
 
 ## 开始使用
 
-当前为可运行的 v0.2.0 桌面版本，采用 Electron、TypeScript、React 和 CodeMirror 6。本工程已包含自己的需求工作区：打开项目根目录，即可管理 `requirements/` 下的 57 个条目和跨模块关联。
+当前为可运行的 v0.2.1 桌面版本，采用 Electron、TypeScript、React 和 CodeMirror 6。本工程已包含自己的需求工作区：打开项目根目录，即可管理 `requirements/` 下的 57 个条目和跨模块关联。
 
 从 [GitHub Releases](https://github.com/matrixji/reqtype/releases) 下载对应架构的 ZIP，解压后打开 macOS 的 `ReqType.app` 或 Windows 目录内的 `ReqType.exe`，无需安装 Node.js。当前原生检查与发行流程见[开发与发布](docs/delivery.md)，早期本机验证记录保留在 [v0.2.0 验证记录](docs/validation-v0.2.0.md)。
 
@@ -59,8 +59,8 @@ npm run data -- check /path/to/project
 ```sh
 npm test
 npm run test:e2e
-npm run package -- --out=release/0.2.0
-npm run package -- --platform=win32 --arch=x64 --out=release/0.2.0
+npm run package -- --out=release/0.2.1
+npm run package -- --platform=win32 --arch=x64 --out=release/0.2.1
 ```
 
 自动化桌面流程在真实 Electron 中运行；测试数据使用临时目录，不修改工程需求。跨平台构建不等同于目标平台运行验证。发行目录尚未签名／公证。
@@ -92,6 +92,7 @@ ReqType 使用 [Apache License 2.0](LICENSE)，版权声明见 [NOTICE](NOTICE)�
 - [回归用例矩阵](docs/regression-cases.md)
 - [开发与发布流程](docs/delivery.md)
 - [Mac App Store 准备](docs/mac-app-store.md)
+- [官网自动发布](docs/website-release.md)
 - [v0.2.0 验证记录与限制](docs/validation-v0.2.0.md)
 - [v0.1 历史验证记录](docs/validation.md)
 

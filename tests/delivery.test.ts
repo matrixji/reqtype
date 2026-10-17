@@ -41,11 +41,14 @@ test('DELIVERY-004：PR 门禁依赖全部原生桌面，只有 tag push 发布�
  assert.deepEqual(build.jobs.desktop.strategy.matrix.include.map((row:any)=>[row.platform,row.arch]),[['darwin','arm64'],['darwin','x64'],['win32','x64']]);
  assert.equal(ci.permissions.contents,'read');assert.equal(release.permissions.contents,'read');assert.equal(release.jobs.publish.permissions.contents,'write');
  assert.deepEqual(release.on.push.tags,['v*']);assert.match(release.jobs.publish.if,/github.event_name == 'push'.*github.ref_type == 'tag'/);assert.deepEqual(release.jobs.publish.needs,['validate','desktop']);
+ assert.deepEqual(release.jobs.deploy.needs,['validate','publish']);assert.equal(release.jobs.deploy.permissions.contents,'read');assert.match(release.jobs.deploy.if,/github.event_name == 'push'.*github.ref_type == 'tag'/);
+ for(const workflow of [ci,build,release])for(const [name,job] of Object.entries(workflow.jobs) as [string,any][])for(const step of job.steps??[])if(JSON.stringify(step).includes('secrets.REQTYPE_SITE_TOKEN'))assert.equal(name,'deploy');
  for(const workflow of [ci,build,release])for(const job of Object.values(workflow.jobs) as any[])for(const step of job.steps??[])if(step.uses?.startsWith('actions/'))assert.match(step.uses,/@[a-f0-9]{40}$/);
 });
 
-test('DELIVERY-005：PR 或手动分支构建不能通过发布脚本创建 Release',()=>{
- const result=spawnSync(process.execPath,['scripts/publish-release.mts'],{encoding:'utf8',env:{...process.env,RELEASE_TAG:'v0.2.0',GITHUB_EVENT_NAME:'pull_request',GITHUB_REF_TYPE:'branch',GITHUB_REF_NAME:'main'}});
+test('DELIVERY-005：PR 或手动分支构建不能通过发布脚本创建 Release',async()=>{
+ const pkg=JSON.parse(await fs.readFile('package.json','utf8'));
+ const result=spawnSync(process.execPath,['scripts/publish-release.mts'],{encoding:'utf8',env:{...process.env,RELEASE_TAG:`v${pkg.version}`,GITHUB_EVENT_NAME:'pull_request',GITHUB_REF_TYPE:'branch',GITHUB_REF_NAME:'main'}});
  assert.notEqual(result.status,0);assert.match(result.stderr,/只允许版本 tag push/);
 });
 
