@@ -7,6 +7,7 @@ import { render as renderMath } from 'katex';
 import rehypeStringify from 'rehype-stringify';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js/lib/common';
+import { remarkReferences, type ReferenceView } from './reference-view';
 
 const processor = unified().use(remarkParse).use(remarkGfm).use(remarkMath).use(remarkRehype).use(rehypeStringify);
 const diagrams = new Map<string, Promise<string>>();
@@ -23,9 +24,11 @@ export function sanitizedContent(html: string, documentPath: string, plugin = fa
   for (const link of fragment.querySelectorAll('a')) if (!link.getAttribute('href')?.startsWith('#')) { link.target = '_blank'; link.rel = 'noreferrer'; }
   return fragment;
 }
-export function markdownElement(source: string, documentPath: string) {
+export function markdownElement(source: string, documentPath: string, references?:ReferenceView) {
   const container = document.createElement('div'); container.className = 'markdown-render';
-  container.append(sanitizedContent(String(processor.processSync(source)), documentPath));
+  const renderer=references?.enabled?unified().use(remarkParse).use(remarkGfm).use(remarkMath).use(()=>remarkReferences(source,references)).use(remarkRehype).use(rehypeStringify):processor;
+  container.append(sanitizedContent(String(renderer.processSync(source)), documentPath));
+  for(const link of container.querySelectorAll<HTMLAnchorElement>('a[data-req-target]'))link.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();references?.navigate(link.dataset.reqTarget!);});
   for (const code of container.querySelectorAll('code.language-math')) { const math = document.createElement('span'), block = code.parentElement?.tagName === 'PRE'; renderMath(code.textContent ?? '', math, { displayMode: block, throwOnError: false, trust: false }); (block ? code.parentElement! : code).replaceWith(math); }
   for (const quote of container.querySelectorAll('blockquote')) {
     const first = quote.querySelector('p'); const match = first?.textContent?.match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i);

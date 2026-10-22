@@ -21,19 +21,19 @@ test('FMT-001：格式域独立，严格拒绝非法版本与未来版本', asyn
   assert.equal(old.id,undefined); assert.equal((old as any)['x-project'].preserve,true);
 });
 
-test('FMT-002：冻结的旧模块精确迁移，BOM、CRLF、身份、编号、关联与未知字段保留', async () => {
-  const source=await fixture('legacy/module.md'), expected=await fixture('v1/module.md');
+test('FMT-002：冻结的旧模块逐步迁移为 v2，BOM、CRLF、身份、编号、关联与未知字段保留', async () => {
+  const source=await fixture('legacy/module.md'), expected=await fixture('v2/module.md');
   const result=migrateDataSource('module',source,'modules/frozen.md');
-  assert.equal(result.source,expected); assert.equal(result.from,0); assert.equal(result.to,1);
+  assert.equal(result.source,expected); assert.equal(result.from,0); assert.equal(result.to,2);
   assert.equal(parseDocumentSource('frozen.md',result.source).requirements.length,2);
   assert.equal(migrateDataSource('module',result.source,'modules/frozen.md').source,result.source);
   assert.deepEqual(migrateDataSource('module',result.source,'modules/frozen.md').steps,[]);
 });
 
 test('FMT-003：未来模块不按 v1 解析；属性补丁和模块补全不能隐式降级', async () => {
-  const source=await fixture('future/module.md'), old=parseDocumentSource('frozen.md',await fixture('v1/module.md'));
+  const source=await fixture('future-v3/module.md'), old=parseDocumentSource('frozen.md',await fixture('v1/module.md'));
   const parsed=parseDocumentSource('future.md',source); assert.equal(parsed.readOnly,true); assert.equal(parsed.requirements.length,0);
-  assert.match(parsed.diagnostics[0].message,/格式版本 2/);
+  assert.match(parsed.diagnostics[0].message,/格式版本 3/);
   assert.throws(()=>patchRequirement(source,old.requirements[0],'status','approved'),/格式版本/);
   assert.throws(()=>ensureModule(source,'Future','44444444-4444-4444-8444-444444444444'),/格式版本/);
   assert.throws(()=>migrateDataSource('module',source),/格式版本/);

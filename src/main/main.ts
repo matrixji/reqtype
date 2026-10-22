@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, net, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, net, shell, safeStorage } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -10,6 +10,8 @@ import { applyMigrations, migrationBackups, previewMigrations, restoreMigration 
 import { PluginManager } from './plugins';
 import { renderPlantuml } from './plantuml';
 import { saveAppState } from './state-storage';
+import { AISettingsStore } from './ai-settings';
+import { AIService } from './ai-service';
 import { readPreferences, writePreferences } from '../core/app-state';
 import { exportFileName } from '../core/config';
 import type { PluginSnapshot } from '../shared/types';
@@ -21,6 +23,8 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'reqasset', privileges: { standa
 let window: BrowserWindow;
 let workspace: Workspace | undefined;
 let plugins: PluginManager;
+let aiSettings:AISettingsStore;
+let aiService:AIService;
 let dirty = false, closing = false;
 let mutations: Promise<unknown> = Promise.resolve();
 const current = () => { if (!workspace) throw new Error('请先打开工作区'); return workspace; };
@@ -30,6 +34,7 @@ const settings = () => path.join(app.getPath('userData'), 'settings.json');
 async function selectWorkspace(root: string, create = false) {
   const next = create ? await Workspace.create(root) : await Workspace.open(root);
   const snapshot = await next.snapshot();
+  aiService?.cancelAll();
   workspace = next;
   try { const previous = await readOptional(settings()); await saveAppState(settings(), 'preferences', writePreferences(workspace.root, previous?.toString('utf8')), previous?.toString('utf8')); } catch (error) { preferenceNotices.add(`最近项目记录未更新，已保留原文件：${(error as Error).message}`); }
   return withNotices(snapshot);
@@ -41,6 +46,10 @@ const handle = (name: string, fn: (...args: any[]) => unknown, mutation = false)
 });
 
 function registerIPC() {
+  handle('aiSettings',()=>aiSettings.read());
+  handle('saveAISettings',(input,version)=>aiSettings.save(input,version),true);
+  handle('aiStart',request=>{current();return aiService.start(request);});
+  handle('aiCancel',(id:string)=>{if(typeof id==='string')aiService.cancel(id);});
   handle('initial', async () => workspace ? withNotices(await workspace.snapshot()) : null);
   handle('open', async (create: boolean) => {
     const selected = await dialog.showOpenDialog(window, { title: create ? '选择新工作区目录' : '打开需求工作区', buttonLabel: create ? '在此创建' : '打开', properties: ['openDirectory', 'createDirectory'] });
@@ -131,6 +140,8 @@ function registerIPC() {
 }
 
 app.whenReady().then(async () => {
+  aiSettings=new AISettingsStore(path.join(app.getPath('userData'),'ai-settings.json'),{available:()=>safeStorage.isEncryptionAvailable(),encrypt:value=>safeStorage.encryptString(value),decrypt:value=>safeStorage.decryptString(Buffer.from(value))});
+  aiService=new AIService(aiSettings,event=>{if(window&&!window.isDestroyed())window.webContents.send('reqtype:ai',event);});
   plugins = new PluginManager(path.join(app.getPath('userData'), 'plugins'), path.join(app.getAppPath(), 'plugins/quality'), path.join(__dirname, 'plugin-host.cjs'));
   await plugins.init();
   const requested = process.argv.find(arg => arg.startsWith('--workspace='))?.slice('--workspace='.length);
@@ -169,4 +180,4 @@ app.whenReady().then(async () => {
   if (initialError) void dialog.showMessageBox(window, { type: 'warning', message: '上次工作区无法打开', detail: initialError });
 });
 app.on('window-all-closed', () => app.quit());
-app.on('will-quit', () => plugins?.close());
+app.on('will-quit', () => {aiService?.cancelAll();plugins?.close();});

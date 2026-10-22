@@ -9,6 +9,7 @@ import { defaultPlantuml, writeRendererDocument } from '../src/core/rendering';
 import { frontmatter, parseDocumentSource } from '../src/core/markdown';
 import { writeJournalDocument } from '../src/main/workspace';
 import { writePluginState, writePreferences } from '../src/core/app-state';
+import { defaultAIProfile } from '../src/core/ai';
 const directory='schemas/',prefix='https://reqtype.local/schemas/';
 async function validator() { const ajv=new Ajv2020({allErrors:true});addFormats(ajv);for(const name of await fs.readdir(directory))if(name.endsWith('.schema.json'))ajv.addSchema(JSON.parse(await fs.readFile(directory+name,'utf8')));return ajv; }
 
@@ -18,12 +19,14 @@ test('SCHEMA-001：各版本 Schema 离线编译，冻结夹具与当前写入�
   check('project-v2',defaultConfig());check('project-v1',parse(await fs.readFile('tests/fixtures/formats/v1/project.yaml','utf8')));
   const source=await fs.readFile('tests/fixtures/formats/v1/module.md','utf8'),fm=frontmatter(source)!;
   check('module-v1',parse(source.slice(fm.yamlFrom,fm.yamlTo)));
+  const v2=await fs.readFile('tests/fixtures/formats/v2/module.md','utf8'),fm2=frontmatter(v2)!;check('module-v2',parse(v2.slice(fm2.yamlFrom,fm2.yamlTo)));
   for(const req of parseDocumentSource('fixture.md',source).requirements)check('requirement-v1',req.meta);
   check('workspace-v1',JSON.parse(await fs.readFile('tests/fixtures/formats/v1/exchange.json','utf8')));
   check('renderers-v1',JSON.parse(writeRendererDocument(defaultPlantuml())));
   check('transaction-v1',JSON.parse(writeJournalDocument({state:'done',entries:[]})));
   check('preferences-v1',JSON.parse(writePreferences('/project')));
   check('plugin-state-v1',JSON.parse(writePluginState(['test.disabled'])));
+  check('ai-v1',{format:'reqtype.ai',version:1,payload:defaultAIProfile()});
   check('migration-backup-v1',{format:'reqtype.migration-backup',version:1,id:'test-backup',createdAt:'2026-10-17T00:00:00.000Z',projectId:null,documents:['modules'],entries:[]});
 });
 

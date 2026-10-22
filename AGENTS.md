@@ -28,7 +28,7 @@
 - 文件保存正文与元数据，查询索引可重建；修改时优先局部更新文本，避免保存时整篇重新格式化。
 - 解析、条目、关联、校验与 Git 适配独立于界面；插件首批扩展点为命令、校验规则和导入导出。
 - 需求块采用显式起止边界的方案继续验证，首版不支持需求块嵌套。
-- 当前项目格式为 2，兼容读取项目 v1；Markdown、原生交换与插件 API 版本仍为 1。后续调整需考虑现有项目兼容。
+- 当前项目与 Markdown 模块格式为 2，分别兼容 v1；原生交换与插件 API 版本仍为 1。旧模块普通保存不升级，begin/end 与正文引用通过显式模块迁移启用。
 
 ## 文档入口
 
@@ -43,6 +43,7 @@
 - `docs/project-item-model.md`：编号只读、类型套餐与迁移、按类型属性和标题检索。
 - `docs/delivery.md` 与 `docs/mac-app-store.md`：GitHub PR／tag 发行和 App Store 准备边界。
 - `docs/website-release.md`：官网 API、由 Release Notes 生成介绍、凭据与不可变版本的部署规则。
+- `docs/ai.md`：可选 AI、本机配置与凭据、明确的发送范围和结果应用约束。
 - `src/core/`：源文本解析、条目与关联；`src/main/`：文件、交换、Git、插件和桌面桥接；`src/renderer/`：React 与编辑器。
 
 ## 后续增强与规模验证
@@ -68,6 +69,8 @@
 - `npm run package` 生成当前平台发行目录；Windows 交叉打包使用 `npm run package -- --platform=win32 --arch=x64`。
 - 修改源区间、文件保存或 Git 时运行对应核心检查；修改编辑器、IPC 或界面操作时运行桌面流程。
 - CodeMirror 块组件不得设置垂直 margin；使用外层 padding，动态图片加载后调用 `requestMeasure()`。组件复用必须考虑位置变化，重建编辑器要重新绑定监听器并保留撤销状态。
+- 实时预览保护隐藏 req 标记；拦截操作时同时保留选区，避免光标落入隐藏元数据。正文围栏暂时未闭合时保留并映射已知边界；源码模式仍允许修复原文。
+- 正文引用以 UUID 定位，和业务关联分别索引；只解析 Markdown 文本上下文。AI 默认关闭，服务与加密凭据只存应用本机状态；仅发送显式选区／指令，候选结果经过源版本与结构检查后才能应用。
 - macOS 上通过的构建和桌面测试不证明 Windows 运行通过；验证记录需区分本机运行、交叉打包与真实 Windows 执行。
 - GitHub 仓库公开，项目使用 Apache-2.0；保持 `LICENSE`、`NOTICE` 和发行包第三方许可。后续修改走工作分支及 PR，全部 `CI required` 检查通过后 squash 合并；禁止直接推送 `main`。本机执行 `npm run setup:git`，服务端保护由 `npm run github:protect` 配置并通过 API 核验。
 - tag `v<package.json 版本>` 只标记已合入 `main` 的提交，成功后创建 Release；应用版本与数据格式分别管理，不为发布流水线修改项目格式。不得重写已发行 tag 或替换发行资产。

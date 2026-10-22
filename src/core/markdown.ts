@@ -5,6 +5,7 @@ import remarkMath from 'remark-math';
 import { parseDocument as parseYaml, isMap, stringify, visit } from 'yaml';
 import { attributesForType, validAttribute } from './config';
 import { assertFormatVersion, FORMATS } from './formats';
+import { referencesInText } from './references';
 import type { Diagnostic, FileSnapshot, ParsedDocument, ProjectConfig, Requirement, RequirementMeta } from '../shared/types';
 
 type Node = { type: string; value?: string; depth?: number; children?: Node[]; position?: { start: { offset?: number }; end: { offset?: number } } };
@@ -42,7 +43,7 @@ export function markdownTree(source: string): Node {
 }
 
 export function parseDocumentSource(path: string, source: string): ParsedDocument {
-  const result: ParsedDocument = { path, title: path.split('/').pop()?.replace(/\.md$/i, '') ?? path, requirements: [], diagnostics: [], headings: [], blocks: [], readOnly: false };
+  const result: ParsedDocument = { path, title: path.split('/').pop()?.replace(/\.md$/i, '') ?? path, requirements: [], references: [], diagnostics: [], headings: [], blocks: [], readOnly: false };
   const error = (from: number, message: string) => result.diagnostics.push({ path, from, severity: 'error', message });
   const fm = frontmatter(source);
   result.frontmatter = fm;
@@ -52,6 +53,7 @@ export function parseDocumentSource(path: string, source: string): ParsedDocumen
       const meta = readYaml(source.slice(fm.yamlFrom, fm.yamlTo));
       if (typeof meta.title === 'string') result.title = meta.title;
       if (meta.reqtype !== undefined) { try { assertFormatVersion('module', meta.reqtype); } catch (cause) { result.readOnly = true; error(0, (cause as Error).message); return result; } }
+      result.version = meta.reqtype as 1 | 2 | undefined;
       if (typeof meta.module === 'string' && uuid.test(meta.module)) result.moduleId = meta.module;
       else if (meta.module !== undefined) error(0, '模块 ID 必须是 UUID');
     } catch (cause) { error(0, `文档元数据：${(cause as Error).message}`); }
@@ -64,11 +66,12 @@ export function parseDocumentSource(path: string, source: string): ParsedDocumen
     if (node.type === 'heading') result.headings.push({ depth: node.depth ?? 1, text: textOf(node), from });
     if (node.type !== 'html') continue;
     const raw = source.slice(from, to);
-    if (/^<!-- req(?:\r?\n|$)/.test(raw)) {
+    if (/^<!-- req(?::begin)?(?:\r?\n|$)/.test(raw)) {
       if (open) { error(from, '需求块不支持嵌套，请先修复边界'); open.invalid = true; continue; }
-      const match = /^(<!-- req\r?\n)([\s\S]*?)\r?\n-->[ \t]*$/.exec(raw);
+      const match = /^(<!-- req(?::begin)?\r?\n)([\s\S]*?)\r?\n-->[ \t]*$/.exec(raw);
       if (!match) { error(from, '需求起始标记不完整，或元数据含有注释终止符'); continue; }
       open = { from, end: to, metaFrom: from + match[1].length, metaTo: from + match[1].length + match[2].length, invalid: false };
+      if(raw.startsWith('<!-- req:begin') !== (result.version===2)) { error(from,'需求边界与模块版本不匹配：begin/end 需要 Markdown v2');open.invalid=true; }
       try {
         const meta = readYaml(match[2]);
         if (typeof meta.id !== 'string' || !uuid.test(meta.id)) throw new Error('条目 ID 必须是 UUID');
@@ -78,8 +81,9 @@ export function parseDocumentSource(path: string, source: string): ParsedDocumen
         if (meta.links !== undefined && (!Array.isArray(meta.links) || meta.links.some(link => !link || typeof link.type !== 'string' || typeof link.target !== 'string' || !uuid.test(link.target)))) throw new Error('links 必须包含关联类型和目标 UUID');
         open.meta = meta as RequirementMeta;
       } catch (cause) { error(from, `需求元数据：${(cause as Error).message}`); open.invalid = true; }
-    } else if (/^<!-- \/req -->[ \t]*$/.test(raw)) {
+    } else if (/^<!-- (?:\/req|req:end) -->[ \t]*$/.test(raw)) {
       if (!open) { error(from, '结束标记没有对应的需求起始标记'); continue; }
+      if(raw.startsWith('<!-- req:end') !== (result.version===2)) { error(from,'结束边界与模块版本不匹配');open.invalid=true; }
       if (!open.invalid && open.meta) {
         const body = source.slice(open.end, from).trim();
         const bodyTree = markdownTree(body);
@@ -91,6 +95,13 @@ export function parseDocumentSource(path: string, source: string): ParsedDocumen
     }
   }
   if (open) error(open.from, '需求块缺少结束标记');
+  if(result.version===2) {
+    const walk=(node:Node) => {
+      if(['code','inlineCode','html','math','inlineMath','link','image','definition'].includes(node.type))return;
+      if(node.type==='text')for(const reference of referencesInText(source,startOf(node),endOf(node)))result.references.push({...reference,path,sourceId:result.requirements.find(req=>reference.from>=req.bodyFrom&&reference.to<=req.bodyTo)?.meta.id});
+      for(const child of node.children??[])walk(child);
+    };walk(tree);
+  }
   const codeRanges = result.blocks.filter(x => x.type === 'code');
   for (const match of source.matchAll(/^(?:<<<<<<< .+|=======|>>>>>>> .+)\r?$/gm)) {
     if (!codeRanges.some(x => match.index! >= x.from && match.index! < x.to)) error(match.index!, '文档包含未解决的 Git 合并标记');
@@ -137,7 +148,22 @@ export function indexWorkspace(files: Pick<FileSnapshot, 'path' | 'content'>[], 
       links.add(`${link.type}:${link.target}`);
     }
   }
-  return { documents, requirements, diagnostics };
+  const references=documents.flatMap(doc=>doc.references);
+  for(const reference of references) {
+    const targets=requirements.filter(req=>req.meta.id.toLowerCase()===reference.target.toLowerCase());
+    if(targets.length!==1)diagnostics.push({path:reference.path,from:reference.from,id:reference.sourceId,severity:targets.length?'error':'warning',message:targets.length?'正文引用目标 ID 有歧义':`正文引用目标不存在：${reference.label??reference.target}`});
+  }
+  return { documents, requirements, references, diagnostics };
+}
+
+export function canInsertReference(path:string,source:string,from:number,to=from) {
+  const doc=parseDocumentSource(path,source);
+  if(doc.readOnly||doc.version!==2||from<0||to<from||to>source.length)return false;
+  if(doc.frontmatter&&from<doc.frontmatter.to)return false;
+  if(doc.requirements.some(req=>from<req.bodyFrom&&to>req.from||from>=req.from&&from<req.bodyFrom||from>=req.bodyTo&&from<req.to||from<req.to&&to>req.bodyTo))return false;
+  let blocked=false;
+  const walk=(node:Node)=>{if(['code','inlineCode','html','math','inlineMath','link','image','definition'].includes(node.type)&&from>=startOf(node)&&from<endOf(node))blocked=true;for(const child of node.children??[])walk(child);};walk(markdownTree(source));
+  return !blocked;
 }
 
 function patchYamlField(yaml: string, field: string, value: unknown): string {
@@ -177,26 +203,48 @@ export function patchRequirement(source: string, req: Requirement, field: string
   return source.slice(0, req.metaFrom) + patchYamlField(yaml, field, value) + source.slice(req.metaTo);
 }
 
+export function moduleSyntaxVersion(source:string):1|2 {
+  const version=moduleVersion(source);if(version!==undefined){assertFormatVersion('module',version);return version;}
+  // Existing unversioned modules and legacy boundaries retain their established meaning.
+  const fm=frontmatter(source);
+  if(fm&&readYaml(source.slice(fm.yamlFrom,fm.yamlTo)).module)return 1;
+  return markdownTree(source).children?.some(node=>node.type==='html'&&/^<!-- req\r?\n/.test(source.slice(startOf(node),endOf(node))))?1:2;
+}
+
 export function ensureModule(source: string, title: string, moduleId: string): string {
   const fm = frontmatter(source), eol = lineEnding(source);
+  const version=moduleSyntaxVersion(source);
   if (fm) {
     let yaml = source.slice(fm.yamlFrom, fm.yamlTo);
     const meta = readYaml(yaml);
     if (meta.reqtype !== undefined) assertFormatVersion('module', meta.reqtype);
     if (meta.module !== undefined && (typeof meta.module !== 'string' || !uuid.test(meta.module))) throw new Error('已有模块 ID 无效，请修复后继续');
-    if (meta.reqtype !== FORMATS.module.current) yaml = patchYamlField(yaml, 'reqtype', FORMATS.module.current);
+    if (meta.reqtype === undefined) yaml = patchYamlField(yaml, 'reqtype', version);
     if (!meta.module) yaml = patchYamlField(yaml, 'module', moduleId);
     const tail = source.slice(fm.yamlTo);
     return source.slice(0, fm.yamlFrom) + yaml + (/^\r?\n/.test(tail) ? '' : eol) + tail;
   }
   const bom = source.startsWith('\uFEFF') ? '\uFEFF' : '';
-  return bom + ['---', `reqtype: ${FORMATS.module.current}`, `module: "${moduleId}"`, `title: ${JSON.stringify(title)}`, '---', '', ''].join(eol) + source.slice(bom.length);
+  return bom + ['---', `reqtype: ${version}`, `module: "${moduleId}"`, `title: ${JSON.stringify(title)}`, '---', '', ''].join(eol) + source.slice(bom.length);
 }
 
-export function makeRequirement(body: string, meta: RequirementMeta, eol = '\n') {
+/** Explicit version at product call sites; the default preserves the existing v1 writer API. */
+export function makeRequirement(body: string, meta: RequirementMeta, eol = '\n', version:1|2=1) {
   const yaml = stringify(meta, { lineWidth: 0 }).trimEnd();
   if (yaml.includes('-->')) throw new Error('元数据不能包含注释终止符');
-  return `<!-- req${eol}${yaml.replace(/\n/g, eol)}${eol}-->${eol}${eol}${body}${eol}${eol}<!-- /req -->`;
+  return `<!-- ${version===2?'req:begin':'req'}${eol}${yaml.replace(/\n/g, eol)}${eol}-->${eol}${eol}${body}${eol}${eol}<!-- ${version===2?'req:end':'/req'} -->`;
+}
+
+/** The only v1→v2 writer. Preserve metadata/body bytes, including fenced examples. */
+export function upgradeModuleSource(source:string) {
+  const before=parseDocumentSource('module.md',source);
+  if(before.readOnly||before.diagnostics.some(d=>d.severity==='error'))throw new Error('请先修复模块语法，再执行格式迁移');
+  if(before.version===2)return source;
+  if(before.version!==1||!before.frontmatter)throw new Error('请先将旧模块迁移为 v1');
+  const patches=before.requirements.flatMap(req=>[{from:req.from,to:req.from+'<!-- req'.length,text:'<!-- req:begin'},{from:req.bodyTo,to:req.to,text:'<!-- req:end -->'}]);
+  for(const patch of patches.sort((a,b)=>b.from-a.from))source=source.slice(0,patch.from)+patch.text+source.slice(patch.to);
+  const fm=frontmatter(source)!;
+  return source.slice(0,fm.yamlFrom)+patchYamlField(source.slice(fm.yamlFrom,fm.yamlTo),'reqtype',2)+source.slice(fm.yamlTo);
 }
 
 export function wrapSelection(source: string, path: string, from: number, to: number, meta: RequirementMeta, moduleId: string) {
@@ -207,7 +255,7 @@ export function wrapSelection(source: string, path: string, from: number, to: nu
   const start = blocks[0].from, end = blocks.at(-1)!.to;
   if (parsed.requirements.some(req => start < req.to && end > req.from)) throw new Error('选区与已有条目重叠，需求块不能嵌套');
   const eol = lineEnding(source);
-  const wrapped = source.slice(0, start) + makeRequirement(source.slice(start, end), meta, eol) + source.slice(end);
+  const wrapped = source.slice(0, start) + makeRequirement(source.slice(start, end), meta, eol,moduleSyntaxVersion(source)) + source.slice(end);
   return ensureModule(wrapped, parsed.title, moduleId);
 }
 
@@ -220,6 +268,13 @@ export function moveRequirement(source: string, path: string, id: string, direct
   if (!selected || !other) return source;
   const [first, second] = selected.from < other.from ? [selected, other] : [other, selected];
   return source.slice(0, first.from) + source.slice(second.from, second.to) + source.slice(first.to, second.from) + source.slice(first.from, first.to) + source.slice(second.to);
+}
+
+export function removeRequirement(source:string,path:string,id:string) {
+  const doc=parseDocumentSource(path,source);
+  if(doc.readOnly||doc.diagnostics.some(d=>d.severity==='error'))throw new Error('请先修复文档诊断');
+  const req=doc.requirements.find(req=>req.meta.id===id);if(!req)throw new Error('条目已变化，请重新选择');
+  return source.slice(0,req.from)+source.slice(req.to);
 }
 
 export function nextKey(requirements: Requirement[], prefix = 'REQ', padding = 3) {

@@ -83,7 +83,7 @@ test('选区扩展到整张表格，移动条目不改变身份', () => {
   assert.match(wrapped, /尾部说明。/);
   assert.throws(() => wrapSelection(wrapped, 'a.md', parsed.requirements[0].bodyFrom + 3, parsed.requirements[0].bodyTo - 1, meta(), randomUUID()), /重叠/);
   const second = { ...meta(), key: 'REQ-002' };
-  wrapped += '\n\n' + makeRequirement('另一个条目', second);
+  wrapped += '\n\n' + makeRequirement('另一个条目', second, '\n', 2);
   wrapped = moveRequirement(wrapped, 'a.md', second.id, -1);
   parsed = parseDocumentSource('a.md', wrapped);
   assert.deepEqual(parsed.requirements.map(x => x.meta.id), [second.id, first.id]);

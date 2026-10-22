@@ -1,12 +1,13 @@
 /** Data versions are independent of the application version and file content hashes. */
 export const FORMATS = {
   project: { name: '项目配置', id: 'reqtype.project', current: 2 },
-  module: { name: 'Markdown 模块', id: 'reqtype.module', current: 1 },
+  module: { name: 'Markdown 模块', id: 'reqtype.module', current: 2 },
   exchange: { name: '交换包', id: 'reqtype', current: 1 },
   renderers: { name: '本机渲染设置', id: 'reqtype.renderers', current: 1 },
   journal: { name: '文件恢复日志', id: 'reqtype.transaction', current: 1 },
   preferences: { name: '最近项目设置', id: 'reqtype.preferences', current: 1 },
   plugins: { name: '插件启用设置', id: 'reqtype.plugin-state', current: 1 },
+  ai: { name: '本机 AI 设置', id: 'reqtype.ai', current: 1 },
   backup: { name: '迁移备份', id: 'reqtype.migration-backup', current: 1 },
 } as const;
 export type FormatKind = keyof typeof FORMATS;
@@ -18,7 +19,7 @@ export class FormatVersionError extends Error {
 }
 export const isRecord = (value: unknown): value is Record<string, any> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 export function assertFormatVersion(kind: FormatKind, value: unknown): asserts value is 1 | 2 {
-  if (!Number.isSafeInteger(value) || !(value === FORMATS[kind].current || kind === 'project' && value === 1)) throw new FormatVersionError(kind, value);
+  if (!Number.isSafeInteger(value) || !(value === FORMATS[kind].current || (kind === 'project' || kind === 'module') && value === 1)) throw new FormatVersionError(kind, value);
 }
 export function readEnvelope<T>(kind: 'renderers' | 'journal' | 'preferences' | 'plugins', input: unknown, validate: (payload: unknown) => T): { value: T; legacy: boolean; envelope: Record<string, any> } {
   if (kind === 'plugins' && Array.isArray(input)) return { value: validate(input), legacy: true, envelope: {} };
