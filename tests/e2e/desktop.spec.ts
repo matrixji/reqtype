@@ -574,3 +574,77 @@ test('旧项目显式升级 v2 启用类型属性，原文备份可恢复为 v1'
   await expect(page.getByLabel('新属性标识',{exact:true})).toBeVisible();await page.getByRole('button',{name:'恢复此备份',exact:true}).click();await expect(page.getByRole('status')).toContainText('已恢复迁移前文件');expect(await fs.readFile(configFile,'utf8')).toBe(source);
   for(const file of files)expect(await fs.readFile(path.join(root,file.path),'utf8')).toBe(file.content);
 });
+
+test('TOOLBAR-UI-001：选区格式、菜单插入、撤销、保存和重开保留原文', async () => {
+  await selectSample(); const file = path.join(root, 'modules/local-save.md');
+  const original = '\uFEFF' + (await fs.readFile(file, 'utf8')).replace(/\r?\n/g, '\r\n'); await fs.writeFile(file, original);
+  await page.getByRole('button', { name: '更多操作', exact: true }).click(); await page.getByRole('button', { name: '刷新工作区', exact: true }).click();
+  await page.locator('.requirement-marker').first().click(); await page.keyboard.press('Shift+ArrowRight'); await page.keyboard.press('Shift+ArrowRight');
+  await page.getByRole('button', { name: '粗体', exact: true }).click(); await page.getByRole('button', { name: '保存', exact: true }).click();
+  await expect.poll(() => fs.readFile(file, 'utf8')).toBe(original.replace('用户需要', '**用户**需要'));
+  await page.getByRole('button', { name: '撤销', exact: true }).click(); await page.getByRole('button', { name: '保存', exact: true }).click(); await expect.poll(() => fs.readFile(file, 'utf8')).toBe(original);
+  await page.locator('.requirement-marker').first().click(); await page.keyboard.press('Shift+ArrowRight'); await page.keyboard.press('Shift+ArrowRight');
+  await page.getByRole('button', { name: '链接', exact: true }).click(); const linkDialog = page.getByRole('dialog', { name: '插入链接' }); await linkDialog.getByLabel('链接地址').fill('https://example.com'); await linkDialog.getByRole('button', { name: '插入', exact: true }).click();
+  await page.getByRole('button', { name: '保存', exact: true }).click(); await expect.poll(() => fs.readFile(file, 'utf8')).toBe(original.replace('用户需要', '[用户](https://example.com)需要'));
+  await page.getByRole('button', { name: '撤销', exact: true }).click(); await page.getByRole('button', { name: '保存', exact: true }).click(); await expect.poll(() => fs.readFile(file, 'utf8')).toBe(original);
+  await page.locator('.requirement-marker').first().click();
+  await page.getByRole('combobox', { name: '代码', exact: true }).selectOption({ label: 'Mermaid' });
+  await page.getByRole('button', { name: '保存', exact: true }).click(); await expect.poll(() => fs.readFile(file, 'utf8')).toContain('```mermaid\r\nflowchart LR');
+  await page.getByRole('button', { name: '源码', exact: true }).click(); await page.getByRole('button', { name: '撤销', exact: true }).click(); await page.getByRole('button', { name: '保存', exact: true }).click(); await expect.poll(() => fs.readFile(file, 'utf8')).toBe(original);
+  await page.locator('.cm-content').focus(); await page.keyboard.press('ControlOrMeta+a'); await page.getByRole('button', { name: '粗体', exact: true }).click(); await expect(page.getByRole('status')).toContainText('选区不能包含元数据'); expect(await fs.readFile(file, 'utf8')).toBe(original);
+  await closeApp(); await launch(true); await selectSample(); expect(await fs.readFile(file, 'utf8')).toBe(original);
+});
+
+test('EXPORT-UI-001：完整 HTML 与 PDF 包含离线图表、公式和图片，失败不覆盖', async ({}, info) => {
+  test.setTimeout(180000);
+  const body = '# 导出验收\n\n[TOC]\n\n## 内容\n\n' + '长文档段落。\n\n'.repeat(50) + [
+    '```typescript', 'const ready = true;', '```', '', '```mermaid', 'flowchart LR', '  Client --> Core', '```', '',
+    '```plantuml', '@startuml', 'Client -> Core: export', '@enduml', '```', '', '$x^2$', '', '$$', 'E=mc^2', '$$', '',
+    '![本地图片](../assets/pixel.png)', '', '| 标题 | 内容 |', '| --- | --- |', '| 一 | 二 |', '',
+    '- [x] 已完成', '', '> [!NOTE]', '> 导出说明', '', '脚注[^api]。', '', '[^api]: 本地脚注内容。', '',
+  ].join('\n');
+  const reqId = randomUUID();
+  const referenced = body + '\n' + makeRequirement('目标正文', { id: reqId, key: 'REQ-099', title: '导出目标' }, '\n', 2) + `\n\n[[[本页引用:req-${reqId}]]] 与 [[[跨文档:req-a58cb6b8-4702-4195-a10e-9cfa2397a9c1]]]。\n`;
+  const file = path.join(root, 'modules/export.md'), source = ensureModule(referenced, '导出验收', randomUUID()); await fs.writeFile(file, source);
+  await page.getByRole('button', { name: '更多操作', exact: true }).click(); await page.getByRole('button', { name: '刷新工作区', exact: true }).click();
+  await page.locator('.file-list button').filter({ hasText: '导出验收' }).click();
+  const htmlPath = path.join(root, 'result.html'); await saveDialog(htmlPath);
+  await page.getByRole('button', { name: '更多操作', exact: true }).click(); await page.getByRole('button', { name: '保存并导出当前 HTML', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText(`已导出 ${htmlPath}`, { timeout: 45000 });
+  const html = await fs.readFile(htmlPath, 'utf8'); expect(html).toContain('data:image/png;base64,'); expect(html).toContain('data:font/woff2;base64,'); expect(html).not.toContain('reqasset:'); expect(html).not.toContain('<!-- req'); expect(html).not.toContain('<script');
+  const opened = app.waitForEvent('window');
+  const offlineId = await app.evaluate(async ({ BrowserWindow }, file) => { const view = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, offscreen: process.platform === 'win32', partition: 'offline-export-test' } }); view.webContents.session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (_, callback) => callback({ cancel: true })); await view.loadFile(file); return view.id; }, htmlPath);
+  const offline = await opened;
+  expect(await app.evaluate(({ BrowserWindow }, id) => { const view = BrowserWindow.fromId(id)!; return { visible: view.isVisible(), focused: view.isFocused() }; }, offlineId)).toEqual({ visible: false, focused: false });
+  await expect(offline.locator('.diagram[data-language=mermaid] svg')).toContainText('Client'); await expect(offline.locator('.diagram[data-language=plantuml] svg')).toContainText('export');
+  await expect(offline.locator(`a[href="#req-${reqId}"]`)).toHaveText('本页引用'); await expect(offline.locator(`[id="req-${reqId}"]`)).toHaveCount(1); await expect(offline.locator('body')).toContainText('跨文档 (');
+  await expect(offline.locator('.katex')).toHaveCount(2); await expect(offline.locator('.export-toc a')).toHaveCount(2); await expect(offline.locator('body')).toContainText('本地脚注内容');
+  expect(await offline.locator('img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true); await offline.screenshot({ path: info.outputPath('export-html.png'), fullPage: true }); await app.evaluate(({ BrowserWindow }, id) => BrowserWindow.fromId(id)?.destroy(), offlineId);
+  const pdfPath = path.join(root, 'result.pdf'); await saveDialog(pdfPath); await page.getByRole('button', { name: '更多操作', exact: true }).click(); await page.getByRole('button', { name: '保存并导出当前 PDF', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText(`已导出 ${pdfPath}`, { timeout: 45000 }); const pdf = await fs.readFile(pdfPath); expect(pdf.subarray(0, 5).toString()).toBe('%PDF-'); expect(pdf.length).toBeGreaterThan(10000); await fs.writeFile(info.outputPath('export.pdf'), pdf); await fs.writeFile(info.outputPath('export.html'), html);
+  expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map(w => w.isVisible()))).toEqual([false]);
+  await fs.writeFile(file, source + '\n![缺失](../assets/missing.png)\n'); await page.getByRole('button', { name: '更多操作', exact: true }).click(); await page.getByRole('button', { name: '刷新工作区', exact: true }).click();
+  await saveDialog(htmlPath); await page.getByRole('button', { name: '更多操作', exact: true }).click(); await page.getByRole('button', { name: '保存并导出当前 HTML', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('missing.png', { timeout: 30000 }); expect(await fs.readFile(htmlPath, 'utf8')).toBe(html);
+});
+
+test('EXPORT-UI-002：取消、过期快照和图表失败保留已有输出，图片不能越界', async () => {
+  await selectSample(); const target = path.join(root, 'keep.html'); await fs.writeFile(target, '原文件');
+  const attempt = async () => { await page.getByRole('button', { name: '更多操作', exact: true }).click(); await page.getByRole('button', { name: '保存并导出当前 HTML', exact: true }).click(); };
+  await app.evaluate(({ dialog }, file) => { dialog.showSaveDialog = async () => ({ canceled: true, filePath: file }); }, target);
+  await attempt(); await expect(page.locator('.busy-label')).toHaveCount(0); expect(await fs.readFile(target, 'utf8')).toBe('原文件');
+  await saveDialog(target);
+  expect(await page.evaluate(async () => { try { await window.reqtype.export('html', 'modules/local-save.md', { html: '<p>stale</p>', version: 'stale' }); return ''; } catch (error) { return (error as Error).message; } })).toContain('文档已变化');
+  expect(await fs.readFile(target, 'utf8')).toBe('原文件');
+  for (const src of ['../../outside.png', 'https://example.com/private.png', '%2e%2e/%2e%2e/outside.png']) expect(await page.evaluate(async src => { try { await window.reqtype.exportImage(src, 'modules/local-save.md'); return false; } catch { return true; } }, src)).toBe(true);
+  const file = path.join(root, 'modules/local-save.md'), source = await fs.readFile(file, 'utf8');
+  await fs.writeFile(file, source + '\n```mermaid\nthis is not a diagram\n```\n');
+  await page.getByRole('button', { name: '更多操作', exact: true }).click(); await page.getByRole('button', { name: '刷新工作区', exact: true }).click(); await attempt();
+  await expect(page.getByRole('status')).toContainText('mermaid）导出失败'); expect(await fs.readFile(target, 'utf8')).toBe('原文件');
+  // A configured backend failure must be reported, with no automatic fallback.
+  const settings = await page.evaluate(() => window.reqtype.projectSettings());
+  await page.evaluate(async settings => { await window.reqtype.saveProject(settings.config, settings.version, { settings: { ...settings.renderers.settings, mode: 'jar', javaPath: '/missing/reqtype-java' }, version: settings.renderers.version }); }, settings);
+  await fs.writeFile(file, source + '\n```plantuml\n@startuml\nA -> B: fail\n@enduml\n```\n');
+  await page.getByRole('button', { name: '更多操作', exact: true }).click(); await page.getByRole('button', { name: '刷新工作区', exact: true }).click(); await attempt();
+  await expect(page.getByRole('status')).toContainText('plantuml）导出失败'); expect(await fs.readFile(target, 'utf8')).toBe('原文件');
+});

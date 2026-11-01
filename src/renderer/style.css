@@ -425,3 +425,9 @@ html[data-platform=windows] .titlebar { padding-left: 20px; }
 @media(max-width:1100px) { .attribute-definition-create { grid-template-columns:1fr 1fr; } }
 
 .requirement-title { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:45%;font-weight:500;font-size:11px;color:#56715e; }
+
+.markdown-toolbar { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 8px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; background: #f8faf6; }
+.markdown-toolbar button, .markdown-toolbar select { border: 1px solid transparent; border-radius: 5px; background: transparent; color: #415b46; min-height: 30px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+.markdown-toolbar button:hover, .markdown-toolbar select:hover { background: #e6eee2; }
+.markdown-toolbar :focus-visible { outline: 2px solid #168572; outline-offset: 1px; }
+.markdown-toolbar :disabled { opacity: .4; cursor: default; }

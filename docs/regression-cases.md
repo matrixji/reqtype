@@ -130,3 +130,16 @@ npm run data -- check /path/to/project
 | SITE-006 | 部署入口拒绝错误 checksum、错误 tag 提交和被修改的 ZIP，在读取 GitHub／发布 API 前失败 |
 
 入口：[交付回归](../tests/delivery.test.ts)。流水线在三平台原生开发版和发行包运行完整桌面流程。离线文档在 1050×684 视口验证，滚动后断言章末远程图片占位确实出现在视口且未联网；剪贴板按系统换行规范化比较，文档落盘仍逐字校验。执行记录与流程见[开发与发布](delivery.md)。
+
+## Markdown 工具栏与渲染导出
+
+| 编号 | 场景与验收结果 |
+| --- | --- |
+| TOOLBAR-001～005 | Unicode 选区、格式取消、多行行级操作、代码围栏冲突、模板、边界拒绝、链接转义与脚注编号 |
+| TOOLBAR-UI-001 | 实际按钮与菜单保留选区，BOM／CRLF 源文局部修改、模式切换、撤销、保存及重开 |
+| EXPORT-UI-001 | 长文档视口外图表、真实本地 PlantUML、Mermaid 标签、内嵌图片与字体、目录／脚注、离线 HTML、PDF、缺失图片不覆盖 |
+| EXPORT-UI-002 | 取消、过期快照、非法图片路径、图表语法错误和 Java 缺失均不覆盖已有输出 |
+
+核心入口为 `tests/markdown-commands.test.ts`，桌面入口为 `tests/e2e/desktop.spec.ts`。导出额外窗口保持隐藏且无项目桥接，PDF 完成后销毁。PDF 的实际文字与页面外观另做人工渲染检查；仅检查文件签名不代表版面验证。
+
+2026-10-31 本机 macOS 验证：`npm test` 90 项通过，`npm run test:e2e` 20 项通过（包含构建）。列表类型转换补充检查 5 项通过，最终构建后工具栏桌面流程再次通过。HTML／PDF 覆盖失败路径、引用定位和本地资源；导出的 3 页 A4 PDF 经文字提取核对 Client／Core、PlantUML 消息、中文、脚注及正文引用，并渲染逐页检查图表、公式、表格与分页。未执行 Windows 实机或发行包验证。
