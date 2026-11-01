@@ -13,6 +13,16 @@ const processor = unified().use(remarkParse).use(remarkGfm).use(remarkMath).use(
 const diagrams = new Map<string, Promise<string>>();
 let mermaid: Promise<typeof import('mermaid')['default']> | undefined;
 
+export function renderMermaid(code: string, cache = true): Promise<string> {
+  const render = (cache ? diagrams.get(code) : undefined) ?? (async () => {
+      mermaid ??= import('mermaid').then(({ default: engine }) => { engine.initialize({ startOnLoad: false, securityLevel: 'strict', htmlLabels: false, suppressErrorRendering: true, fontFamily: 'system-ui, sans-serif', flowchart: { htmlLabels: false } }); return engine; });
+      return (await (await mermaid).render(`diagram_${crypto.randomUUID().replaceAll('-', '_')}`, code)).svg;
+    })();
+  if (cache) diagrams.set(code, render); if (diagrams.size > 80) diagrams.delete(diagrams.keys().next().value!);
+  void render.catch(() => { if (diagrams.get(code) === render) diagrams.delete(code); });
+  return render;
+}
+
 export function sanitizedContent(html: string, documentPath: string, plugin = false, diagram = false) {
   const fragment = DOMPurify.sanitize(html, { RETURN_DOM_FRAGMENT: true, FORBID_TAGS: [...diagram ? [] : ['style'], 'iframe', 'form', 'script', 'object', 'embed', 'foreignObject'], ...(plugin ? { FORBID_ATTR: ['style'] } : {}) });
   for (const input of fragment.querySelectorAll('input')) { if (input.type !== 'checkbox') input.remove(); else input.disabled = true; }
@@ -24,9 +34,11 @@ export function sanitizedContent(html: string, documentPath: string, plugin = fa
   for (const link of fragment.querySelectorAll('a')) if (!link.getAttribute('href')?.startsWith('#')) { link.target = '_blank'; link.rel = 'noreferrer'; }
   return fragment;
 }
-export function markdownElement(source: string, documentPath: string, references?:ReferenceView) {
+export function markdownElement(source: string, documentPath: string, references?:ReferenceView, anchors?: Map<number, string>) {
   const container = document.createElement('div'); container.className = 'markdown-render';
-  const renderer=references?.enabled?unified().use(remarkParse).use(remarkGfm).use(remarkMath).use(()=>remarkReferences(source,references)).use(remarkRehype).use(rehypeStringify):processor;
+  const renderer = references?.enabled || anchors ? unified().use(remarkParse).use(remarkGfm).use(remarkMath).use(() => remarkReferences(source, references)).use(() => (tree: any) => {
+    for (const node of tree.children ?? []) { const id = anchors?.get(node.position?.start.offset); if (id && node.type === 'html') { node.type = 'paragraph'; node.children = []; node.data = { hName: 'span', hProperties: { id } }; delete node.value; } }
+  }).use(remarkRehype).use(rehypeStringify) : processor;
   container.append(sanitizedContent(String(renderer.processSync(source)), documentPath));
   for(const link of container.querySelectorAll<HTMLAnchorElement>('a[data-req-target]'))link.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();references?.navigate(link.dataset.reqTarget!);});
   for (const code of container.querySelectorAll('code.language-math')) { const math = document.createElement('span'), block = code.parentElement?.tagName === 'PRE'; renderMath(code.textContent ?? '', math, { displayMode: block, throwOnError: false, trust: false }); (block ? code.parentElement! : code).replaceWith(math); }
@@ -55,11 +67,7 @@ export function codeElement(code: string, info: string, documentPath: string, ch
     const loading = document.createElement('p'); loading.className = 'render-status'; loading.textContent = '正在绘制 PlantUML…'; body.prepend(loading);
     void window.reqtype.renderPlantuml(code, documentPath).then(svg => { if (!container.isConnected) return; body.replaceChildren(sanitizedContent(svg, documentPath, false, true)); body.classList.add('diagram-preview'); changed(); }).catch(error => { if (!container.isConnected) return; loading.textContent = (error as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, ''); changed(); });
   } else if (language === 'mermaid') {
-    const render = diagrams.get(code) ?? (async () => {
-      mermaid ??= import('mermaid').then(({ default: engine }) => { engine.initialize({ startOnLoad: false, securityLevel: 'strict', htmlLabels: false, suppressErrorRendering: true, fontFamily: 'system-ui, sans-serif', flowchart: { htmlLabels: false } }); return engine; });
-      return (await (await mermaid).render(`diagram_${crypto.randomUUID().replaceAll('-', '_')}`, code)).svg;
-    })();
-    diagrams.set(code, render); if (diagrams.size > 80) diagrams.delete(diagrams.keys().next().value!);
+    const render = renderMermaid(code);
     const loading = document.createElement('p'); loading.className = 'render-status'; loading.textContent = '正在本地绘图…'; body.prepend(loading);
     void render.then(svg => { if (!container.isConnected) return; body.replaceChildren(sanitizedContent(svg, documentPath, false, true)); body.classList.add('diagram-preview'); changed(); }).catch(error => { if (!container.isConnected) return; loading.textContent = `图形语法错误：${(error as Error).message}`; changed(); });
   } else if (!hljs.getLanguage(language) && language && !['text', 'plaintext', 'txt'].includes(language)) {

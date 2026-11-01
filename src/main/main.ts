@@ -2,7 +2,8 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, net, shell, safeSt
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { Workspace, atomicWrite, decode, exists, readOptional, safePath } from './workspace';
+import { exportImage, printDocument } from './document-export';
+import { Workspace, digest, atomicWrite, decode, exists, readOptional, safePath } from './workspace';
 import { applyImport, decodeExchange, exportWorkspace, prepareImport } from './exchange';
 import { commitFiles, gitDiff, gitShow, gitState, initGit } from './git';
 import { previewTypeMigration, applyTypeMigration } from './item-types';
@@ -13,6 +14,7 @@ import { saveAppState } from './state-storage';
 import { AISettingsStore } from './ai-settings';
 import { AIService } from './ai-service';
 import { readPreferences, writePreferences } from '../core/app-state';
+import { assertModuleWritable } from '../core/markdown';
 import { exportFileName } from '../core/config';
 import type { PluginSnapshot } from '../shared/types';
 
@@ -59,12 +61,20 @@ function registerIPC() {
   handle('save', (relative: string, content: string, version: string | null) => current().save(relative, content, version), true);
   handle('projectSettings', () => current().projectSettings());
   handle('saveProject', (config, version, renderers) => current().saveProject(config, version, renderers), true);
-  handle('export', async (kind: string, relative?: string) => {
+  handle('exportImage', (src: string, documentPath: string) => exportImage(current().root, src, documentPath));
+  handle('export', async (kind: string, relative?: string, rendered?: { html: string; version: string }) => {
     const ws = current();
-    if (kind !== 'json' && kind !== 'markdown') throw new Error('不支持的导出格式');
+    if (kind !== 'json' && kind !== 'markdown' && kind !== 'html' && kind !== 'pdf') throw new Error('不支持的导出格式');
     const { config } = await ws.config();
-    const target = await dialog.showSaveDialog(window, { title: '导出', defaultPath: exportFileName(config, kind, relative), filters: [{ name: kind === 'json' ? 'ReqType 项目' : 'Markdown 文档', extensions: [kind === 'json' ? 'json' : 'md'] }] });
+    const target = await dialog.showSaveDialog(window, { title: '导出', defaultPath: exportFileName(config, kind, relative), filters: [{ name: kind === 'json' ? 'ReqType 项目' : `${kind.toUpperCase()} 文档`, extensions: [kind === 'markdown' ? 'md' : kind] }] });
     if (target.canceled || !target.filePath) return null;
+    if (kind === 'html' || kind === 'pdf') {
+      if (!relative || !rendered || typeof rendered.html !== 'string' || Buffer.byteLength(rendered.html) > 128 * 1024 * 1024) throw new Error('导出文档无效或超过 128 MB');
+      const sourceBytes = await fs.readFile(await safePath(ws.root, relative)); assertModuleWritable(decode(sourceBytes));
+      if (digest(sourceBytes) !== rendered.version) throw new Error('文档已变化，请重新导出');
+      const bytes = kind === 'pdf' ? await printDocument(rendered.html) : Buffer.from(rendered.html);
+      await atomicWrite(target.filePath, bytes); return target.filePath;
+    }
     const bytes = kind === 'json' ? Buffer.from(JSON.stringify(await exportWorkspace(ws), null, config.exports.prettyJson ? 2 : undefined)) : await fs.readFile(await safePath(ws.root, relative!));
     await atomicWrite(target.filePath, bytes); return target.filePath;
   });

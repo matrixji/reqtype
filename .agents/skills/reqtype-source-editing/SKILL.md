@@ -1,6 +1,6 @@
 ---
 name: reqtype-source-editing
-description: 修改 ReqType 的 Markdown 源区间、实时预览与正文引用、AI 结果应用、项目 YAML 保存或格式迁移时使用，维护原文、身份、边界保护与回归。
+description: 修改 ReqType 的 Markdown 源区间、编辑工具栏、实时预览与正文引用、HTML／PDF 导出、AI 结果应用、项目 YAML 保存或格式迁移时使用，维护原文、身份、边界保护与回归。
 ---
 
 # ReqType 源文本编辑
@@ -42,6 +42,12 @@ description: 修改 ReqType 的 Markdown 源区间、实时预览与正文引用
 - 会话缓存同时保存对应状态的解析／已知边界快照，以同一 session key 和 epoch 通过新 StateField 的 `init` 恢复。仅重新解析未闭合正文会丢失保护；缓存失效或初次打开损坏文件时不能猜测边界。围栏回归要先核对真实选区和错误诊断，再检查跨视图隐藏与撤销，避免按键未产生预期修改而假通过。
 - `BlockWrapper` 可能为零高度 tip 和正文创建不同包装节点；tip 锚点不占行高，只有正文区域绘制边框。点击坐标还要与实际 `.cm-line` 的 `posAtDOM` 范围核对，避免行尾点击写到下一行或块外；tip 明确定位后同步聚焦，覆盖空块输入。用 EDITOR 桌面用例验证真实代码编辑、空块和视口。
 - AI 候选通过 `captureAIContext`／`applyAIResult` 应用，检查完整源快照及条目身份，复用编辑历史和磁盘并发保护。网络、加密凭据留在主进程；协议及取消用 `tests/ai.test.ts` 的本机 HTTP 服务测试，不能为回归要求用户提供真实密钥。
+
+## 工具栏与文档导出
+
+- 工具栏通过 `markdown-commands.ts` 生成局部修改，在 `EditorHandle.format` 中检查已知边界并加入单步撤销。源码模式虽然允许手工修复元数据，格式按钮仍需显式检查边界；鼠标按钮和表单不能丢掉 CodeMirror 选区。列表类型转换保留缩进，避免把原列表标记变成嵌套内容。
+- HTML／PDF 从保存后的完整快照生成，不复制虚拟编辑器 DOM。`document-export.ts` 内嵌图表、图片和字体，主进程校验源版本后写入。目录只收正文标题，排除脚注插件生成的隐藏标题；重复 Mermaid 输出使用独立 SVG ID。PDF 窗口无 preload，等待资源完成且始终隐藏，失败时销毁窗口并保留旧文件。
+- Electron Playwright 不支持 `context.newPage()`；检查导出文件时通过 Electron 创建隐藏 BrowserWindow，再取得其 Page。取消导出的测试须等待异步任务完成后再替换保存对话框 mock，否则仍在执行的第一次导出可能使用第二次 mock，产生错误的覆盖结论。HTML 断言图表标签和内嵌资源，PDF 还需提取实际文字并渲染检查页面。
 
 ## 验证与成功标准
 

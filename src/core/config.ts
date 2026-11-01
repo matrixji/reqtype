@@ -87,10 +87,10 @@ export const statusOptions = (config: ProjectConfig, current = 'draft') => [curr
 export function assertTransition(config: ProjectConfig, from: string, to: unknown) {
   if (typeof to !== 'string' || !statusOptions(config, from).includes(to)) throw new Error(`工作流不允许 ${from} → ${String(to)}`);
 }
-export function exportFileName(config: ProjectConfig, kind: 'json' | 'markdown', document = 'document.md', date = new Date()) {
+export function exportFileName(config: ProjectConfig, kind: 'json' | 'markdown' | 'html' | 'pdf', document = 'document.md', date = new Date()) {
   const safe = (text: string) => text.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/[. ]+$/, '') || 'project';
   const stem = config.exports.fileName.replace(/\{project\}/g, safe(config.name)).replace(/\{date\}/g, date.toISOString().slice(0, 10)).replace(/\{module\}/g, safe(document.split('/').pop()?.replace(/\.md$/i, '') || 'document'));
-  return safe(stem) + (kind === 'json' ? '.reqtype.json' : '.md');
+  return safe(stem) + (kind === 'json' ? '.reqtype.json' : kind === 'markdown' ? '.md' : `.${kind}`);
 }
 
 export function attributesForType(config: ProjectConfig, type: string) {

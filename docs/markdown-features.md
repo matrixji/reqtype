@@ -42,3 +42,17 @@ JAR 模式允许项目根目录内的本地 `!include`，不允许网络引用�
 ## 实现依据
 
 实现使用 [CodeMirror 语言支持](https://codemirror.net/docs/ref/)、[Mermaid API](https://mermaid.js.org/config/usage)、[KaTeX 本地字体](https://katex.org/docs/font)，以及 PlantUML 的[命令行管道](https://plantuml.com/command-line)、[编码协议](https://plantuml.com/text-encoding)与[本地资源配置](https://plantuml.com/security)。具体版本以锁文件和 `resources/plantuml/source.json` 为准，发行目录附带依赖许可。
+
+## 编辑工具栏
+
+编辑区顶部的 Markdown 工具栏在实时预览与源码模式均可使用。支持 H1–H6、粗体、斜体、删除线、行内代码、列表与任务、引用、链接、图片和表格；代码菜单可插入常见语言以及 Mermaid、PlantUML 模板；更多格式包含分隔线、公式、脚注、提示块和目录。
+
+选中文字时应用格式，未选择时插入可编辑模板。每次操作可单步撤销；点击工具栏或填写链接／图片表单保留编辑器选区。只读文档禁用工具栏，包含元数据或跨越需求边界的操作会被拒绝。图片填写相对当前文档的路径，不会下载网络图片。
+
+## HTML 与 PDF 文档导出
+
+“更多操作 → 保存并导出当前 HTML／PDF”先保存，再从当前完整文档生成输出，包括视口外的内容。HTML 是可独立离线打开的单文件，内嵌本地图片、公式字体、代码高亮样式及 Mermaid／PlantUML SVG；PDF 使用相同渲染结果，以 A4 纵向、15 mm 页边距输出。
+
+导出显示正文、表格、任务、公式、脚注、提示块、目录及需求引用，不显示 YAML 元数据或需求边界。文档内引用可跳转到目标，跨文档引用显示编号与标题。自定义插件代码块保留源码。Markdown 与 JSON 导出仍保留原始图表代码，项目默认导出格式保持原有设置。
+
+图表语法错误、Java 不可用、配置的 PlantUML Server 失败、图片缺失或不可解码时，导出失败并保留已有目标文件。网络图片需先本地化；不会为导出自动下载资源或切换 PlantUML 后端。图片只允许从项目目录读取，单张上限 32 MB；文档输出上限 128 MB。取消保存对话框不写入导出文件，源文档的显式保存不回滚。未来格式文档不按当前语义生成 HTML／PDF。

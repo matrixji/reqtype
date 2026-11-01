@@ -55,7 +55,8 @@ export interface DesktopAPI {
   save(path: string, content: string, expectedVersion: string | null): Promise<FileSnapshot>;
   projectSettings(): Promise<ProjectSettings>;
   saveProject(config: ProjectConfig, expectedVersion: string | null, renderers?: RendererSettings): Promise<WorkspaceSnapshot>;
-  export(kind: 'json' | 'markdown', path?: string): Promise<string | null>;
+  exportImage(src: string, documentPath: string): Promise<string>;
+  export(kind: 'json' | 'markdown' | 'html' | 'pdf', path?: string, rendered?: { html: string; version: string }): Promise<string | null>;
   prepareImport(): Promise<ImportPreview | null>;
   applyImport(token: string, paths: string[]): Promise<WorkspaceSnapshot>;
   previewTypeMigration(from: string, to: string): Promise<TypeMigrationPreview>;
